@@ -33,21 +33,37 @@ export interface LightReading {
   zoneRadius: number;
 }
 
+// ── Motion profile ────────────────────────────────────────────────────────────
+
+/** Angular unit used by the motion profile */
+export type MotionUnit = 'deg' | 'rad';
+
+/**
+ * Trapezoidal motion profile for one axis of the sensitivity zone.
+ * The zone accelerates to maxVelocity, cruises, then decelerates to a stop at
+ * each range boundary before reversing – no abrupt velocity jumps.
+ */
+export interface MotionAxisConfig {
+  /** Minimum position (inclusive) in motionUnit from frame centre */
+  rangeMin: number;
+  /** Maximum position (inclusive) in motionUnit from frame centre */
+  rangeMax: number;
+  /** Peak speed in motionUnit / s */
+  maxVelocity: number;
+  /** Acceleration and deceleration magnitude in motionUnit / s² */
+  maxAcceleration: number;
+}
+
 /** Configuration for the oscillating sensitivity zone */
 export interface ZoneConfig {
   /** Radius of the dashed-circle zone in pixels */
   radius: number;
-  /**
-   * Oscillation amplitude as a fraction of frame width (0–0.5).
-   * At 0.5 the zone sweeps to the frame edge.
-   */
-  amplitudeX: number;
-  /** Oscillation amplitude as a fraction of frame height (0–0.5) */
-  amplitudeY: number;
-  /** Oscillation frequency in Hz (horizontal) */
-  freqX: number;
-  /** Oscillation frequency in Hz (vertical) */
-  freqY: number;
+  /** Angular unit for rangeMin/Max, maxVelocity, and maxAcceleration */
+  unit: MotionUnit;
+  /** Horizontal axis motion profile */
+  axisX: MotionAxisConfig;
+  /** Vertical axis motion profile */
+  axisY: MotionAxisConfig;
 }
 
 /** Camera field-of-view used to map pixel coords to angles */

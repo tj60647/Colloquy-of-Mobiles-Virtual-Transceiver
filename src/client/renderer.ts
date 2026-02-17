@@ -148,8 +148,8 @@ export class Renderer {
     const detected = r?.detected ?? false;
 
     // ── Info panel (top-left) ────────────────────────────────────────────────
-    const panelW = 230;
-    const panelH = 180;
+    const panelW = 240;
+    const panelH = 200;
     ctx.save();
     ctx.fillStyle = COLORS.hudBg;
     this.roundRect(0, 0, panelW, panelH, 0);
@@ -158,6 +158,10 @@ export class Renderer {
     ctx.font      = '12px "Courier New", monospace';
     ctx.textBaseline = 'top';
 
+    const unitLabel = p.zone.config.unit;
+    const velLabel  = `${unitLabel}/s`;
+    const fmt1 = (n: number) => n.toFixed(1);
+
     const lines: Array<[string, string]> = r
       ? [
           ['DETECT', detected ? '● YES' : '○ no'],
@@ -165,7 +169,8 @@ export class Renderer {
           ['ANGLE ', `${r.xAngle.toFixed(1)}° H  ${r.yAngle.toFixed(1)}° V`],
           ['BRIGHT', `${r.brightness}  (bg ${r.background})`],
           ['DELTA ', `${r.delta > 0 ? '+' : ''}${r.delta}  / thr ${p.threshold}`],
-          ['ZONE  ', `(${Math.round(r.zoneX)}, ${Math.round(r.zoneY)}) r=${r.zoneRadius}`],
+          ['POS   ', `${fmt1(p.zone.posX)}${unitLabel}  ${fmt1(p.zone.posY)}${unitLabel}`],
+          ['VEL   ', `${fmt1(p.zone.velX)} ${velLabel}  ${fmt1(p.zone.velY)} ${velLabel}`],
           ['WS    ', p.wsConnected ? 'connected' : 'offline'],
           ['BUFF  ', `${p.ringBuffer.size} samples`],
         ]

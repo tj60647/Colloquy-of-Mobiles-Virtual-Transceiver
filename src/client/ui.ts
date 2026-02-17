@@ -1,5 +1,5 @@
 import type { ViewMode } from './renderer.js';
-import type { ZoneConfig, FovConfig } from '../shared/types.js';
+import type { ZoneConfig, FovConfig, MotionUnit } from '../shared/types.js';
 
 /**
  * All user-tunable application configuration in one flat object.
@@ -30,11 +30,10 @@ export class UI {
     backgroundAlpha: 0.03,
     morseUnitMs:     100,
     zone: {
-      radius:     50,
-      amplitudeX: 0.30, // fraction of frame width
-      amplitudeY: 0.20,
-      freqX:      0.10, // Hz
-      freqY:      0.07,
+      radius: 50,
+      unit:   'deg',
+      axisX: { rangeMin: -22, rangeMax: 22, maxVelocity: 25, maxAcceleration: 40 },
+      axisY: { rangeMin: -14, rangeMax: 14, maxVelocity: 18, maxAcceleration: 30 },
     },
     fov: {
       hFov: 60,
@@ -69,17 +68,28 @@ export class UI {
     this.slider('zone-radius', 10, 200, 1, this.config.zone.radius,
       v => { this.config.zone.radius = v; });
 
-    this.slider('amp-x', 0, 0.50, 0.01, this.config.zone.amplitudeX,
-      v => { this.config.zone.amplitudeX = v; });
+    // Motion unit toggle (deg / rad)
+    this.unitToggle('motion-unit-rad', u => { this.config.zone.unit = u; });
 
-    this.slider('amp-y', 0, 0.50, 0.01, this.config.zone.amplitudeY,
-      v => { this.config.zone.amplitudeY = v; });
+    // ── X axis motion profile ────────────────────────────────────────────────
+    this.slider('x-range-min', -90, 0, 0.5, this.config.zone.axisX.rangeMin,
+      v => { this.config.zone.axisX.rangeMin = v; });
+    this.slider('x-range-max', 0, 90, 0.5, this.config.zone.axisX.rangeMax,
+      v => { this.config.zone.axisX.rangeMax = v; });
+    this.slider('x-max-vel', 0.5, 180, 0.5, this.config.zone.axisX.maxVelocity,
+      v => { this.config.zone.axisX.maxVelocity = v; });
+    this.slider('x-max-acc', 1, 360, 1, this.config.zone.axisX.maxAcceleration,
+      v => { this.config.zone.axisX.maxAcceleration = v; });
 
-    this.slider('freq-x', 0.01, 2.0, 0.01, this.config.zone.freqX,
-      v => { this.config.zone.freqX = v; });
-
-    this.slider('freq-y', 0.01, 2.0, 0.01, this.config.zone.freqY,
-      v => { this.config.zone.freqY = v; });
+    // ── Y axis motion profile ────────────────────────────────────────────────
+    this.slider('y-range-min', -90, 0, 0.5, this.config.zone.axisY.rangeMin,
+      v => { this.config.zone.axisY.rangeMin = v; });
+    this.slider('y-range-max', 0, 90, 0.5, this.config.zone.axisY.rangeMax,
+      v => { this.config.zone.axisY.rangeMax = v; });
+    this.slider('y-max-vel', 0.5, 180, 0.5, this.config.zone.axisY.maxVelocity,
+      v => { this.config.zone.axisY.maxVelocity = v; });
+    this.slider('y-max-acc', 1, 360, 1, this.config.zone.axisY.maxAcceleration,
+      v => { this.config.zone.axisY.maxAcceleration = v; });
 
     // ── FOV ──────────────────────────────────────────────────────────────────
     this.slider('h-fov', 20, 180, 1, this.config.fov.hFov,
@@ -133,6 +143,17 @@ export class UI {
     const el = document.getElementById(id) as HTMLInputElement | null;
     if (!el) return;
     el.addEventListener('change', () => set(el.checked));
+  }
+
+  /**
+   * Bind the motion-unit radio/toggle: unchecked = 'deg', checked = 'rad'.
+   * When the unit changes the slider labels and range limits are NOT rescaled
+   * automatically – the user must re-enter values in the new unit.
+   */
+  private unitToggle(id: string, set: (unit: MotionUnit) => void): void {
+    const el = document.getElementById(id) as HTMLInputElement | null;
+    if (!el) return;
+    el.addEventListener('change', () => set(el.checked ? 'rad' : 'deg'));
   }
 
   /** Update a label element that shows the current value of a slider */

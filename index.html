@@ -68,29 +68,68 @@
         <input type="range" id="zone-radius" />
         <span class="ctrl-val" id="zone-radius-val">50</span>
       </div>
+
+      <!-- Motion unit toggle -->
+      <div class="toggle-row" style="margin-top:6px;margin-bottom:4px;">
+        <span class="toggle-label">deg</span>
+        <label class="switch" title="Switch motion unit between degrees and radians">
+          <input type="checkbox" id="motion-unit-rad" />
+          <span class="slider-pill"></span>
+        </label>
+        <span class="toggle-label">rad</span>
+      </div>
+
+      <!-- X axis motion profile -->
+      <div class="section-label" style="margin-top:8px;">X axis (horizontal)</div>
       <div class="ctrl-row">
-        <label for="amp-x">Amp X</label>
-        <input type="range" id="amp-x" />
-        <span class="ctrl-val" id="amp-x-val">0.3</span>
+        <label for="x-range-min">Range min</label>
+        <input type="range" id="x-range-min" />
+        <span class="ctrl-val" id="x-range-min-val">-22</span>
       </div>
       <div class="ctrl-row">
-        <label for="amp-y">Amp Y</label>
-        <input type="range" id="amp-y" />
-        <span class="ctrl-val" id="amp-y-val">0.2</span>
+        <label for="x-range-max">Range max</label>
+        <input type="range" id="x-range-max" />
+        <span class="ctrl-val" id="x-range-max-val">22</span>
       </div>
       <div class="ctrl-row">
-        <label for="freq-x">Freq X Hz</label>
-        <input type="range" id="freq-x" />
-        <span class="ctrl-val" id="freq-x-val">0.1</span>
+        <label for="x-max-vel">Max vel</label>
+        <input type="range" id="x-max-vel" />
+        <span class="ctrl-val" id="x-max-vel-val">25</span>
       </div>
       <div class="ctrl-row">
-        <label for="freq-y">Freq Y Hz</label>
-        <input type="range" id="freq-y" />
-        <span class="ctrl-val" id="freq-y-val">0.07</span>
+        <label for="x-max-acc">Max acc</label>
+        <input type="range" id="x-max-acc" />
+        <span class="ctrl-val" id="x-max-acc-val">40</span>
       </div>
-      <div style="font-size:10px;color:var(--muted);margin-top:2px;">
-        Amp = fraction of frame dimension (0–0.5).
-        Different X/Y freqs → Lissajous sweep.
+
+      <!-- Y axis motion profile -->
+      <div class="section-label" style="margin-top:10px;">Y axis (vertical)</div>
+      <div class="ctrl-row">
+        <label for="y-range-min">Range min</label>
+        <input type="range" id="y-range-min" />
+        <span class="ctrl-val" id="y-range-min-val">-14</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="y-range-max">Range max</label>
+        <input type="range" id="y-range-max" />
+        <span class="ctrl-val" id="y-range-max-val">14</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="y-max-vel">Max vel</label>
+        <input type="range" id="y-max-vel" />
+        <span class="ctrl-val" id="y-max-vel-val">18</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="y-max-acc">Max acc</label>
+        <input type="range" id="y-max-acc" />
+        <span class="ctrl-val" id="y-max-acc-val">30</span>
+      </div>
+
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6;">
+        Trapezoidal profile: accelerates to max velocity, cruises, then
+        decelerates to a smooth stop at each boundary before reversing.
+        Different X/Y velocities create a Lissajous-like sweep.
+        Units: deg/s or rad/s depending on the toggle above.
       </div>
     </div>
 

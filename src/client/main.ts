@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   // ── Subsystems ────────────────────────────────────────────────────────────
   const ui      = new UI();
   const bgModel = new BackgroundModel(ui.config.backgroundAlpha);
-  const zone    = new SensitivityZone(camera.width, camera.height, ui.config.zone);
+  const zone    = new SensitivityZone(camera.width, camera.height, ui.config.zone, ui.config.fov);
   const fov     = new FovMapper(ui.config.fov);
   const det     = new LightDetector(ui.config.threshold);
   const rb      = new RingBuffer<boolean>(240);
@@ -89,6 +89,7 @@ async function main(): Promise<void> {
     // Sync config from UI every frame (cheap reads)
     bgModel.alpha        = ui.config.backgroundAlpha;
     zone.config          = ui.config.zone;
+    zone.updateFov(ui.config.fov);
     fov.config           = ui.config.fov;
     det.threshold        = ui.config.threshold;
     decoder.unitMs       = ui.config.morseUnitMs;
