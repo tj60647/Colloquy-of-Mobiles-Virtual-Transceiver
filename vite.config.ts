@@ -6,6 +6,18 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   root: '.',
+  plugins: [
+    {
+      // Rewrite bare MPA routes to their .html files in dev mode
+      name: 'mpa-routes',
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          if (req.url === '/flash') req.url = '/flash.html';
+          next();
+        });
+      },
+    },
+  ],
   server: {
     port: 5173,
     proxy: {
