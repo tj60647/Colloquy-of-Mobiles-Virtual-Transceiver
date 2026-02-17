@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Light Pattern Detector</title>
+  <link rel="stylesheet" href="/src/client/styles.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Canvas area ──────────────────────────────────────────────────── -->
+  <div id="canvas-wrap">
+    <canvas id="main-canvas"></canvas>
+    <div id="status-msg">Starting…</div>
+  </div>
+
+  <!-- ── Control panel ────────────────────────────────────────────────── -->
+  <aside id="controls">
+    <div class="panel-title">Light Pattern Detector</div>
+
+    <!-- View mode -->
+    <div class="section">
+      <div class="section-label">View</div>
+      <div class="toggle-row">
+        <span class="toggle-label">Live camera</span>
+        <label class="switch" title="Toggle background view">
+          <input type="checkbox" id="view-mode-bg" />
+          <span class="slider-pill"></span>
+        </label>
+        <span class="toggle-label">Background</span>
+      </div>
+    </div>
+
+    <!-- Detection -->
+    <div class="section">
+      <div class="section-label">Detection</div>
+      <div class="ctrl-row">
+        <label for="threshold">Threshold</label>
+        <input type="range" id="threshold" />
+        <span class="ctrl-val" id="threshold-val">30</span>
+      </div>
+      <div class="btn-row">
+        <button id="btn-reset-bg" title="Reseed background model from current frame">
+          Reset BG
+        </button>
+      </div>
+    </div>
+
+    <!-- Background model -->
+    <div class="section">
+      <div class="section-label">Background model</div>
+      <div class="ctrl-row">
+        <label for="bg-alpha">Learn rate</label>
+        <input type="range" id="bg-alpha" />
+        <span class="ctrl-val" id="bg-alpha-val">0.03</span>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px;">
+        Lower = slower adaptation (more stable reference)
+      </div>
+    </div>
+
+    <!-- Sensitivity zone -->
+    <div class="section">
+      <div class="section-label">Sensitivity zone</div>
+      <div class="ctrl-row">
+        <label for="zone-radius">Radius px</label>
+        <input type="range" id="zone-radius" />
+        <span class="ctrl-val" id="zone-radius-val">50</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="amp-x">Amp X</label>
+        <input type="range" id="amp-x" />
+        <span class="ctrl-val" id="amp-x-val">0.3</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="amp-y">Amp Y</label>
+        <input type="range" id="amp-y" />
+        <span class="ctrl-val" id="amp-y-val">0.2</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="freq-x">Freq X Hz</label>
+        <input type="range" id="freq-x" />
+        <span class="ctrl-val" id="freq-x-val">0.1</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="freq-y">Freq Y Hz</label>
+        <input type="range" id="freq-y" />
+        <span class="ctrl-val" id="freq-y-val">0.07</span>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px;">
+        Amp = fraction of frame dimension (0–0.5).
+        Different X/Y freqs → Lissajous sweep.
+      </div>
+    </div>
+
+    <!-- Field of view -->
+    <div class="section">
+      <div class="section-label">Camera field of view</div>
+      <div class="ctrl-row">
+        <label for="h-fov">H-FOV °</label>
+        <input type="range" id="h-fov" />
+        <span class="ctrl-val" id="h-fov-val">60</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="v-fov">V-FOV °</label>
+        <input type="range" id="v-fov" />
+        <span class="ctrl-val" id="v-fov-val">45</span>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px;">
+        Typical webcam: 60° H × 45° V.
+        Maps pixel coords → angular coords in the HUD.
+      </div>
+    </div>
+
+    <!-- Morse decoder -->
+    <div class="section">
+      <div class="section-label">Morse decoder</div>
+      <div class="ctrl-row">
+        <label for="morse-unit">Unit ms</label>
+        <input type="range" id="morse-unit" />
+        <span class="ctrl-val" id="morse-unit-val">100</span>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px;">
+        1 unit = dot duration.  Dash ≥ 2.5 units.
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button id="btn-reset-decode" class="danger">
+          Clear decode
+        </button>
+      </div>
+    </div>
+
+    <!-- WebSocket info -->
+    <div class="ws-note">
+      <strong style="color:var(--accent);">WebSocket subscriber</strong><br>
+      Connect to <code>ws://&lt;host&gt;/ws</code> and send:<br>
+      <code>{"type":"identify","payload":{"role":"subscriber"}}</code><br><br>
+      You will receive <code>sensor_reading</code> messages at 40 Hz containing
+      pixel coords, FOV angles, brightness delta, and detection state.
+    </div>
+
+  </aside>
+</div>
+
+<script type="module" src="/src/client/main.ts"></script>
+</body>
+</html>
