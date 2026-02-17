@@ -281,3 +281,29 @@ button.danger:hover {
   color: var(--accent);
   font-size: 10px;
 }
+
+/* ── Pattern match display ────────────────────────────────────────────────── */
+#pattern-match {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: rgba(0,255,136,0.06);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  margin-top: 4px;
+}
+#pattern-match.visible { display: flex; }
+
+#pattern-match .match-word {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+
+#pattern-match .match-score {
+  font-size: 0.72rem;
+  color: var(--muted);
+}

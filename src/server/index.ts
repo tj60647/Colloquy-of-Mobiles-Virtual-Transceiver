@@ -39,7 +39,10 @@ const httpServer = http.createServer((req, res) => {
   const rawUrl = req.url ?? '/';
   // Ignore query strings, avoid path traversal
   const urlPath = rawUrl.split('?')[0].replace(/\.\./g, '');
-  const resolved = urlPath === '/' ? '/index.html' : urlPath;
+  const resolved =
+    urlPath === '/'      ? '/index.html' :
+    urlPath === '/flash' ? '/flash.html' :
+    urlPath;
   const filePath = path.join(DIST_CLIENT, resolved);
 
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {

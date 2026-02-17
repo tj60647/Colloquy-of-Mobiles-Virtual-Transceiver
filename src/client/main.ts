@@ -19,9 +19,11 @@ import { FovMapper         } from './fovMapper.js';
 import { LightDetector    } from './detector.js';
 import { RingBuffer        } from './ringBuffer.js';
 import { PatternDecoder   } from './patternDecoder.js';
+import { PatternMatcher   } from './patternMatcher.js';
 import { Renderer          } from './renderer.js';
 import { WsClient          } from './wsClient.js';
 import { UI                } from './ui.js';
+import { DICT_LABELS       } from '../shared/dictionary.js';
 import type { LightReading } from '../shared/types.js';
 
 const SAMPLE_INTERVAL_MS = 1000 / 40; // 25 ms → 40 Hz
@@ -80,7 +82,12 @@ async function main(): Promise<void> {
   const det     = new LightDetector(ui.config.threshold);
   const rb      = new RingBuffer<boolean>(240);
   const decoder = new PatternDecoder(ui.config.morseUnitMs);
+  const matcher = new PatternMatcher();
   const renderer= new Renderer(canvas, ctx);
+
+  const matchEl = document.getElementById('pattern-match');
+  const matchWordEl  = matchEl?.querySelector('.match-word')  as HTMLElement | null;
+  const matchScoreEl = matchEl?.querySelector('.match-score') as HTMLElement | null;
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   // In dev Vite proxies /ws → ws://localhost:3001/ws
@@ -92,7 +99,7 @@ async function main(): Promise<void> {
 
   // ── UI callbacks ──────────────────────────────────────────────────────────
   ui.onResetBackground = () => bgModel.reset();
-  ui.onResetDecoder    = () => decoder.reset();
+  ui.onResetDecoder    = () => { decoder.reset(); matcher.reset(); };
 
   // ── Main loop ─────────────────────────────────────────────────────────────
   let lastSampleTs = 0;
@@ -130,9 +137,22 @@ async function main(): Promise<void> {
 
         rb.push(reading.detected);
         decoder.addSample(reading.detected, timestamp);
+        matcher.addSample(reading.detected);
 
         // Auto-flush Morse decoder on long silences
         decoder.flush(timestamp);
+
+        // Update pattern match display
+        if (matchEl) {
+          const m = matcher.lastMatch;
+          if (m) {
+            matchWordEl && (matchWordEl.textContent = m.word);
+            matchScoreEl && (matchScoreEl.textContent = `${DICT_LABELS[m.word]}  ${Math.round(m.score * 100)}%`);
+            matchEl.classList.add('visible');
+          } else {
+            matchEl.classList.remove('visible');
+          }
+        }
 
         wsClient.sendReading(reading);
       }
