@@ -11,7 +11,8 @@
  *   Renderer.render  (every rAF frame for smooth visuals)
  */
 
-import { CameraManager   } from './camera.js';
+import { CameraManager    } from './camera.js';
+import { CameraControls   } from './cameraControls.js';
 import { BackgroundModel  } from './background.js';
 import { SensitivityZone  } from './sensitivityZone.js';
 import { FovMapper         } from './fovMapper.js';
@@ -50,6 +51,20 @@ async function main(): Promise<void> {
   canvas.width  = camera.width;
   canvas.height = camera.height;
   setStatus('Camera ready.');
+
+  // ── Camera controls panel ─────────────────────────────────────────────────
+  const camPropsEl = document.getElementById('cam-props');
+  const camControls = camPropsEl
+    ? new CameraControls(camPropsEl, camera)
+    : null;
+
+  // Build once on startup
+  camControls?.build();
+
+  // Allow manual refresh (useful after switching cameras)
+  document.getElementById('btn-refresh-cam')?.addEventListener('click', () => {
+    camControls?.build();
+  });
 
   // ── Off-screen canvas for frame capture ───────────────────────────────────
   const offCanvas = document.createElement('canvas');

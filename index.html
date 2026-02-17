@@ -170,6 +170,23 @@
       </div>
     </div>
 
+    <!-- Camera properties -->
+    <div class="section">
+      <div class="section-label">Camera properties</div>
+      <div class="btn-row" style="margin-bottom:8px;">
+        <button id="btn-refresh-cam">Refresh</button>
+      </div>
+      <!-- Populated dynamically by CameraControls.build() after camera init -->
+      <div id="cam-props">
+        <p class="cam-note">Waiting for camera…</p>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6;">
+        For light detection, set <em>Exposure mode → manual</em> then reduce
+        Exposure time + ISO so the background is dim and brief flashes stand out.
+        Full controls require Chrome/Edge.
+      </div>
+    </div>
+
     <!-- WebSocket info -->
     <div class="ws-note">
       <strong style="color:var(--accent);">WebSocket subscriber</strong><br>

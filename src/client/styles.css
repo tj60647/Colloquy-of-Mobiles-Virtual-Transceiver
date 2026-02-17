@@ -215,6 +215,56 @@ button.danger:hover {
   color: var(--danger);
 }
 
+/* ── Camera controls (dynamically generated) ─────────────────────────────── */
+.cam-info-line {
+  font-size: 10px;
+  color: var(--accent);
+  margin-bottom: 8px;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.cam-note {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.6;
+  white-space: pre-line;
+  margin: 4px 0;
+}
+
+/* Dynamically injected <label> inside .ctrl-row */
+#cam-props .ctrl-row label {
+  width: 80px;
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+#cam-props .ctrl-val {
+  width: 56px;
+  text-align: right;
+  color: var(--accent2);
+  font-size: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cam-select {
+  flex: 1;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.cam-select:focus {
+  outline: 1px solid var(--accent);
+}
+
 /* ── Footer note ──────────────────────────────────────────────────────────── */
 .ws-note {
   margin: 10px 16px 0;
