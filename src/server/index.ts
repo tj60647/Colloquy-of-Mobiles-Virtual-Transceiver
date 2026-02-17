@@ -19,7 +19,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { WsMessage, IdentifyPayload } from '../shared/types.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
-const DIST_CLIENT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../dist/client');
+// Compiled output: dist/server/index.js  →  dist/client is one level up
+const DIST_CLIENT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../client');
 
 // ── HTTP server (serves built frontend in production) ────────────────────────
 

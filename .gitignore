@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output – Heroku builds this via npm run build
+dist/
+
+# Vite cache
+.vite/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Webcam-based light pattern detector with Morse code decoding and WebSocket streaming",
   "type": "module",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "concurrently \"vite\" \"tsx watch src/server/index.ts\"",
     "build": "vite build && tsc -p tsconfig.server.json",
