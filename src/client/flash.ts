@@ -96,6 +96,22 @@ async function acquireTorch(): Promise<boolean> {
     const tracks = torchStream.getVideoTracks();
     if (tracks.length === 0) throw new Error('No video track');
     torchTrack = tracks[0];
+
+    // Verify the device actually supports torch before proceeding.
+    // getCapabilities() is not available on iOS Safari, so guard the call.
+    const caps = typeof torchTrack.getCapabilities === 'function'
+      ? (torchTrack.getCapabilities() as { torch?: boolean })
+      : {};
+    if (!caps.torch) {
+      setStatus('Torch not supported on this device. Use Chrome on Android.', true);
+      torchStream.getTracks().forEach(t => t.stop());
+      torchStream = null;
+      torchTrack  = null;
+      camPreview.srcObject = null;
+      camPreview.classList.remove('visible');
+      return false;
+    }
+
     return true;
   } catch (e) {
     setStatus(`Camera error: ${String(e)}`, true);
