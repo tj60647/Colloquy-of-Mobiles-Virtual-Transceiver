@@ -1,0 +1,245 @@
+# Virtual Colloquy Light Sensor
+
+Webcam-based light-pattern detector with two browser apps:
+- **Sensor app** (`/`): captures camera frames, detects light pulses, decodes patterns, and streams readings over WebSocket.
+- **Transmitter app** (`/flash`): emits dictionary patterns using phone torch (or speaker tone fallback).
+
+---
+
+## Deep Assessment (as of 2026-02-17)
+
+### Overall health
+- **Build status:** ✅ `npm run build` succeeds (Vite client + TypeScript server compile).
+- **Architecture quality:** **Good** — clear module boundaries, typed shared protocol, predictable data flow.
+- **Runtime resilience:** **Moderate** — reconnect/backoff exists, but no heartbeat timeout or auth.
+- **Performance profile:** **Moderate-to-good** — stable 40 Hz pipeline, with one obvious optimization opportunity in detector math.
+- **Operational maturity:** **Moderate** — deployable and understandable, but missing tests, observability, and formal security controls.
+
+### What is strong
+1. **Clear separation of concerns**
+   - `src/client` handles capture, signal processing, rendering, and UX.
+   - `src/server` is a focused relay/static host.
+   - `src/shared` centralizes protocol + dictionary typing.
+2. **Well-typed protocol and domain model**
+   - Shared `LightReading`, `WsMessage`, and dictionary types reduce drift between client and server.
+3. **Robust UI control surface**
+   - Camera capability introspection and dynamic control generation are unusually strong for this class of app.
+4. **Practical reconnect behavior**
+   - Sensor WebSocket client uses exponential backoff and automatic re-identify.
+5. **Dual-mode transmitter fallback**
+   - Torch mode plus sound mode improves practical usability across device/browser differences.
+
+### Key technical risks / gaps
+1. **No automated tests**
+   - Core behavior (decoder thresholds, matcher alignment logic, detector output invariants) is untested.
+2. **WebSocket trust model is open**
+   - Any client can identify as `sensor`/`subscriber`; no origin allowlist, token auth, or role authorization.
+3. **No heartbeat/timeout for stale sockets**
+   - Server responds to `ping` but does not proactively prune idle/dead peers.
+4. **Potential detector hot-path inefficiency**
+   - `LightDetector.detect()` calls `background.getLuminanceAt()` per pixel, which repeatedly clamps/rounds and recalculates index.
+5. **Camera lifecycle cleanup not explicit in main app**
+   - `CameraManager.stop()` exists but is not wired to page lifecycle events in `main.ts`.
+6. **Limited observability**
+   - Minimal structured logging and no metrics for frame rate, detection rate, dropped WS sends, etc.
+
+### Prioritized improvements
+**P0 (high impact / low-medium effort)**
+- Add unit tests for:
+  - `PatternDecoder` timing boundaries (dot/dash and gap transitions).
+  - `PatternMatcher` threshold/alignment behavior.
+  - `FovMapper` round-trip sanity.
+- Add minimal WebSocket auth (shared token) and reject unauthenticated role claims.
+- Add server heartbeat cycle (`ping` + terminate stale clients).
+
+**P1 (performance + reliability)**
+- Optimize detector inner loop by computing background luminance directly from pre-indexed channel arrays or a cached luminance frame.
+- Add lifecycle hooks (`visibilitychange`, `beforeunload`) to disconnect WS and stop camera stream.
+- Add configurable sample rate and ring buffer sizing via UI/config.
+
+**P2 (operability + DX)**
+- Add npm scripts for lint/check/test and CI pipeline.
+- Add runtime diagnostics panel (actual sample Hz, decode confidence trends, reconnect count).
+- Add protocol version field to WS messages for forward compatibility.
+
+---
+
+## Architecture
+
+```text
+Camera frame (rAF)
+  -> BackgroundModel.update (EMA)
+  -> every 25ms (40Hz):
+       LightDetector.detect
+       -> RingBuffer.push
+       -> PatternDecoder.addSample/flush
+       -> PatternMatcher.addSample
+       -> WsClient.sendReading
+  -> Renderer.draw (canvas HUD + overlays)
+
+Sensor client (/)
+  -- ws identify(sensor) + sensor_reading -->
+WebSocket relay server (/ws)
+  -- broadcast sensor_reading --> subscribers
+
+Transmitter client (/flash)
+  -> emits fixed 40-segment dictionary words via torch or tone
+```
+
+---
+
+## Repository layout
+
+```text
+src/
+  client/
+    main.ts             Sensor app entrypoint and loop orchestration
+    flash.ts            Torch/tone transmitter app
+    camera.ts           Camera abstraction + capability APIs
+    cameraControls.ts   Dynamic camera tuning UI
+    background.ts       EMA background model
+    detector.ts         Zone luminance delta detector
+    sensitivityZone.ts  Trapezoidal motion profiles (X/Y)
+    fovMapper.ts        Pixel <-> angle conversions
+    patternDecoder.ts   Timing-based Morse decoder
+    patternMatcher.ts   Dictionary pattern matcher
+    renderer.ts         Canvas rendering + HUD
+    wsClient.ts         Sensor WebSocket client with reconnect
+    ringBuffer.ts       Generic circular buffer
+    ui.ts               DOM control bindings and runtime config
+    styles.css          Sensor page styling
+  server/
+    index.ts            HTTP static host + WS relay
+  shared/
+    types.ts            Shared domain and protocol types
+    dictionary.ts       8-word, 40-segment dictionary
+index.html              Sensor page shell
+flash.html              Transmitter page shell
+vite.config.ts          MPA setup, dev WS proxy, build inputs
+```
+
+---
+
+## Message protocol (`/ws`)
+
+### Identify
+```json
+{ "type": "identify", "payload": { "role": "sensor" } }
+```
+or
+```json
+{ "type": "identify", "payload": { "role": "subscriber" } }
+```
+
+### Sensor reading (broadcast from sensor to subscribers)
+```json
+{
+  "type": "sensor_reading",
+  "payload": {
+    "timestamp": 1739750000000,
+    "frameX": 320,
+    "frameY": 240,
+    "xAngle": 0,
+    "yAngle": 0,
+    "detected": true,
+    "brightness": 142,
+    "background": 104,
+    "delta": 38,
+    "zoneX": 318.7,
+    "zoneY": 233.2,
+    "zoneRadius": 50
+  }
+}
+```
+
+### Ping/pong
+```json
+{ "type": "ping" }
+```
+```json
+{ "type": "pong" }
+```
+
+---
+
+## Getting started
+
+### Prerequisites
+- Node.js **20+**
+- npm **10+**
+- Modern Chromium browser for best camera capabilities
+
+### Install
+```bash
+npm install
+```
+
+### Development
+Runs both services concurrently:
+- Vite dev server on `http://localhost:5173`
+- WebSocket/HTTP relay server on `http://localhost:3001`
+
+```bash
+npm run dev
+```
+
+Use:
+- Sensor app: `http://localhost:5173/`
+- Transmitter app: `http://localhost:5173/flash`
+
+Vite proxies `/ws` to `ws://localhost:3001/ws` in dev.
+
+### Production build + run
+```bash
+npm run build
+npm start
+```
+
+Server listens on `PORT` (default `3001`) and serves built client from `dist/client`.
+
+---
+
+## Deployment notes
+
+- `Procfile` expects built output:
+  - `web: node dist/server/index.js`
+- For Heroku-like environments:
+  - `heroku-postbuild` runs `npm run build`
+- Ensure WebSocket upgrades are enabled for `/ws` at your reverse proxy.
+
+---
+
+## Browser/device compatibility
+
+- **Sensor app (`/`)**: works in modern desktop/mobile browsers with camera access.
+- **Advanced camera controls**: best in Chrome/Edge; limited in Firefox/Safari.
+- **Torch mode (`/flash`)**: generally Chrome on Android only.
+- **Sound mode (`/flash`)**: cross-browser fallback.
+
+---
+
+## Troubleshooting
+
+- **No detections:** lower exposure/ISO in camera controls, reduce ambient light, then tune threshold.
+- **WS disconnected:** verify server is running and `/ws` proxy path is correct.
+- **Torch unavailable:** switch to sound mode or use Android Chrome with rear camera.
+- **Decode noisy:** increase Morse unit duration and/or reduce detection threshold oscillation.
+
+---
+
+## Current limitations
+
+- No authentication/authorization for WS roles.
+- No test suite.
+- No persistent storage or event replay.
+- No formal API versioning.
+
+---
+
+## Suggested next work items
+
+1. Add `vitest` unit tests for decoder/matcher/fov mapper.
+2. Add WS auth token and role guard.
+3. Add server heartbeat timeout for client pruning.
+4. Add lightweight telemetry (sample Hz, reconnect count, decode hit rate).
+5. Add CI job for build + tests.
