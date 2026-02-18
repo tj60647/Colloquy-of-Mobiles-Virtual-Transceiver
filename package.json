@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"tsx watch src/server/index.ts\"",
     "build": "vite build && tsc -p tsconfig.server.json",
+    "heroku-postbuild": "npm run build",
     "start": "node dist/server/index.js",
     "preview": "vite preview"
   },
