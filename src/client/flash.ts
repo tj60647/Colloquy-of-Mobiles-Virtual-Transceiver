@@ -211,6 +211,9 @@ function releaseTorch(): void {
 
 function startAudio(): void {
   audioCtx  = new AudioContext();
+  // Browsers often start the context suspended due to autoplay policy;
+  // resume() unlocks it — must be called synchronously in the user-gesture handler.
+  void audioCtx.resume();
   gainNode  = audioCtx.createGain();
   gainNode.gain.value = 0;
   gainNode.connect(audioCtx.destination);
@@ -323,6 +326,7 @@ function stop(): void {
   if (mode === 'flash') {
     releaseTorch();
   } else {
+    if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
     setTone(false);
     stopAudio();
     indicator.classList.remove('sound-on');
