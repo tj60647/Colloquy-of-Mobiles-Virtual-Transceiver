@@ -19,17 +19,31 @@ import {
   type DictWord,
 } from '../shared/dictionary.js';
 
+// ── Tone frequencies ──────────────────────────────────────────────────────────
+
+const TONE_FREQS = [1760, 1976, 2093, 2349, 2637] as const;
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
-const indicator  = document.getElementById('torch-indicator')!;
-const statusEl   = document.getElementById('status')!;
-const startBtn   = document.getElementById('start-btn') as HTMLButtonElement;
-const wordGrid   = document.getElementById('word-grid')!;
-const patternBar = document.getElementById('pattern-bar')!;
-const loopCount  = document.getElementById('loop-count')!;
-const camPreview = document.getElementById('cam-preview') as HTMLVideoElement;
+const indicator    = document.getElementById('torch-indicator')!;
+const statusEl     = document.getElementById('status')!;
+const startBtn     = document.getElementById('start-btn') as HTMLButtonElement;
+const wordGrid     = document.getElementById('word-grid')!;
+const patternBar   = document.getElementById('pattern-bar')!;
+const loopCount    = document.getElementById('loop-count')!;
+const camPreview   = document.getElementById('cam-preview') as HTMLVideoElement;
+const modeFlashBtn = document.getElementById('mode-flash') as HTMLButtonElement;
+const modeSoundBtn = document.getElementById('mode-sound') as HTMLButtonElement;
+const freqSection  = document.getElementById('freq-section')!;
+const freqSlider   = document.getElementById('freq-slider') as HTMLInputElement;
+const freqDisplay  = document.getElementById('freq-display')!;
 
 // ── State ─────────────────────────────────────────────────────────────────────
+
+type TransmitMode = 'flash' | 'sound';
+
+let mode:         TransmitMode = 'flash';
+let selectedFreqIdx            = 0;
 
 let torchTrack:  MediaStreamTrack | null = null;
 let torchStream: MediaStream | null      = null;
@@ -38,6 +52,12 @@ let timeoutId:   ReturnType<typeof setTimeout> | null = null;
 let startTime    = 0;
 let loops        = 0;
 let selectedWord: DictWord = 'I_O';
+
+// ── Audio state ───────────────────────────────────────────────────────────────
+
+let audioCtx:   AudioContext | null   = null;
+let oscillator: OscillatorNode | null = null;
+let gainNode:   GainNode | null       = null;
 
 // ── Build word selector ───────────────────────────────────────────────────────
 
@@ -60,6 +80,32 @@ function selectWord(word: DictWord): void {
 }
 
 selectWord('I_O');
+
+// ── Mode switch ───────────────────────────────────────────────────────────────
+
+function setMode(m: TransmitMode): void {
+  if (running) stop();
+  mode = m;
+  modeFlashBtn.classList.toggle('active', m === 'flash');
+  modeSoundBtn.classList.toggle('active', m === 'sound');
+  freqSection.style.display = m === 'sound' ? 'flex' : 'none';
+  indicator.textContent    = m === 'flash' ? '💡' : '🔊';
+  startBtn.textContent     = m === 'flash' ? 'Start Flashing' : 'Start Tone';
+  setStatus('Select a word and tap Start.');
+}
+
+modeFlashBtn.addEventListener('click', () => setMode('flash'));
+modeSoundBtn.addEventListener('click', () => setMode('sound'));
+
+// ── Frequency selector ────────────────────────────────────────────────────────
+
+freqSlider.addEventListener('input', () => {
+  selectedFreqIdx = parseInt(freqSlider.value, 10);
+  freqDisplay.textContent = `${TONE_FREQS[selectedFreqIdx]} Hz`;
+  if (oscillator && audioCtx) {
+    oscillator.frequency.setValueAtTime(TONE_FREQS[selectedFreqIdx], audioCtx.currentTime);
+  }
+});
 
 // ── Pattern bar ───────────────────────────────────────────────────────────────
 
@@ -161,6 +207,35 @@ function releaseTorch(): void {
   camPreview.classList.remove('visible');
 }
 
+// ── Audio helpers ─────────────────────────────────────────────────────────────
+
+function startAudio(): void {
+  audioCtx  = new AudioContext();
+  gainNode  = audioCtx.createGain();
+  gainNode.gain.value = 0;
+  gainNode.connect(audioCtx.destination);
+  oscillator = audioCtx.createOscillator();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = TONE_FREQS[selectedFreqIdx];
+  oscillator.connect(gainNode);
+  oscillator.start();
+}
+
+function setTone(on: boolean): void {
+  if (!gainNode || !audioCtx) return;
+  gainNode.gain.setTargetAtTime(on ? 0.6 : 0, audioCtx.currentTime, 0.002);
+}
+
+function stopAudio(): void {
+  if (oscillator) {
+    try { oscillator.stop(); } catch { /* already stopped */ }
+    oscillator.disconnect();
+    oscillator = null;
+  }
+  if (gainNode) { gainNode.disconnect(); gainNode = null; }
+  if (audioCtx)  { void audioCtx.close(); audioCtx = null; }
+}
+
 // ── Precision timing loop ─────────────────────────────────────────────────────
 
 const TOTAL_MS = SEGMENT_MS * PATTERN_LEN; // 1000 ms per loop
@@ -174,11 +249,16 @@ function tick(): void {
   const pattern    = DICTIONARY[selectedWord];
   const torchOn    = pattern[segIdx] === 1;
 
-  // Update torch
-  void setTorch(torchOn);
-
-  // Update UI
-  indicator.classList.toggle('on', torchOn);
+  // Update output
+  if (mode === 'flash') {
+    void setTorch(torchOn);
+    indicator.classList.toggle('on', torchOn);
+    indicator.classList.remove('sound-on');
+  } else {
+    setTone(torchOn);
+    indicator.classList.toggle('sound-on', torchOn);
+    indicator.classList.remove('on');
+  }
   renderPatternBar(selectedWord, segIdx);
 
   // Update loop counter
@@ -217,13 +297,17 @@ startBtn.addEventListener('click', async () => {
 });
 
 async function start(): Promise<void> {
-  setStatus('Requesting camera access…');
-  startBtn.disabled = true;
+  if (mode === 'flash') {
+    setStatus('Requesting camera access…');
+    startBtn.disabled = true;
 
-  const ok = await acquireTorch();
-  if (!ok) {
-    startBtn.disabled = false;
-    return;
+    const ok = await acquireTorch();
+    if (!ok) {
+      startBtn.disabled = false;
+      return;
+    }
+  } else {
+    startAudio();
   }
 
   running = true;
@@ -236,11 +320,17 @@ async function start(): Promise<void> {
 
 function stop(): void {
   running = false;
-  releaseTorch();
+  if (mode === 'flash') {
+    releaseTorch();
+  } else {
+    setTone(false);
+    stopAudio();
+    indicator.classList.remove('sound-on');
+  }
   indicator.classList.remove('on');
   renderPatternBar(selectedWord, -1);
   loopCount.textContent = '';
-  startBtn.textContent = 'Start Flashing';
+  startBtn.textContent = mode === 'flash' ? 'Start Flashing' : 'Start Tone';
   startBtn.classList.remove('running');
   setStatus('Stopped.');
 }

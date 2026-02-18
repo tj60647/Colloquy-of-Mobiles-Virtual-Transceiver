@@ -167,16 +167,97 @@
     }
 
     a { color: var(--accent); text-decoration: none; }
+
+    /* ── Mode switch ─────────────────────────────────── */
+    .mode-switch {
+      display: flex;
+      gap: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      width: 100%;
+      max-width: 380px;
+    }
+    .mode-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .mode-btn.active {
+      background: var(--accent);
+      color: #000;
+    }
+
+    /* ── Frequency selector ──────────────────────────── */
+    #freq-section {
+      width: 100%;
+      max-width: 380px;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .freq-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    #freq-display {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    #freq-slider {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .freq-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    /* ── Sound indicator ─────────────────────────────── */
+    #torch-indicator.sound-on {
+      background: var(--accent);
+      box-shadow: 0 0 40px 10px rgba(0,229,255,0.5);
+    }
   </style>
 </head>
 <body>
-  <h1>Flash Transmitter <span id="build-ver" style="font-size:0.6em;opacity:0.5;font-weight:400;letter-spacing:0">v5</span></h1>
+  <h1>Transmitter <span id="build-ver" style="font-size:0.6em;opacity:0.5;font-weight:400;letter-spacing:0">v6</span></h1>
+
+  <div class="mode-switch">
+    <button id="mode-flash" class="mode-btn active">💡 Flash</button>
+    <button id="mode-sound" class="mode-btn">🔊 Sound</button>
+  </div>
 
   <div id="torch-indicator">💡</div>
 
   <p id="status">Select a word and tap Start.</p>
 
   <div class="word-grid" id="word-grid"></div>
+
+  <div id="freq-section" style="display:none">
+    <div class="freq-header">
+      <span>Frequency</span>
+      <span id="freq-display">1760 Hz</span>
+    </div>
+    <input type="range" id="freq-slider" min="0" max="4" step="1" value="0">
+    <div class="freq-ticks">
+      <span>1760</span><span>1976</span><span>2093</span><span>2349</span><span>2637</span>
+    </div>
+  </div>
 
   <div id="pattern-bar"></div>
 
@@ -187,8 +268,8 @@
   <video id="cam-preview" autoplay muted playsinline></video>
 
   <p class="note">
-    Uses the rear camera torch (flashlight).<br>
-    Supported on Chrome/Android. iOS Safari does not support the torch API.
+    Flash mode uses the rear camera torch — Chrome/Android only.<br>
+    Sound mode plays a sine wave through the speaker (all browsers).
   </p>
   <p class="note"><a href="/">← Sensor</a></p>
 
