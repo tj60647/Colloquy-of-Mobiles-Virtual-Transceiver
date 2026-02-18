@@ -1,8 +1,10 @@
 import type { LightReading } from '../shared/types.js';
+import { DICT_LABELS } from '../shared/dictionary.js';
 import type { SensitivityZone } from './sensitivityZone.js';
 import type { BackgroundModel  } from './background.js';
 import type { RingBuffer       } from './ringBuffer.js';
 import type { PatternDecoder   } from './patternDecoder.js';
+import type { MatchResult } from './patternMatcher.js';
 
 export type ViewMode = 'live' | 'background';
 
@@ -14,6 +16,11 @@ export interface RenderParams {
   ringBuffer:      RingBuffer<boolean>;
   lastReading:     LightReading | null;
   decoder:         PatternDecoder;
+  patternMatch:    MatchResult | null;
+  detectorMode:    'light' | 'audio';
+  audioSpectrum:   Uint8Array | null;
+  audioBandpassCenter: number;
+  audioBandpassQ:  number;
   threshold:       number;
   wsConnected:     boolean;
 }
@@ -41,6 +48,12 @@ const COLORS = {
  *   4. HUD overlay (readings, angles, WS status, Morse output)
  */
 export class Renderer {
+  private readonly specWidth = 130;
+  private readonly specHeight = 72;
+  private readonly specBins = 64;
+  private readonly specMaxHz = 3000;
+  private specHistory: Uint8Array[] = [];
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly ctx:    CanvasRenderingContext2D,
@@ -67,6 +80,10 @@ export class Renderer {
 
     // 4 ── HUD ────────────────────────────────────────────────────────────────
     this.drawHUD(p, width, height);
+
+    if (p.detectorMode === 'audio') {
+      this.drawAudioSpectrogram(p, width);
+    }
   }
 
   // ── Private drawing helpers ────────────────────────────────────────────────
@@ -196,18 +213,118 @@ export class Renderer {
     this.roundRect(0, height - botH, width, botH, 0);
     ctx.fill();
 
-    const decoded = p.decoder.decoded.map((e) => e.letter).join('');
+    const dictWord = p.patternMatch?.word ?? '—';
+    const dictInfo = p.patternMatch
+      ? `${DICT_LABELS[p.patternMatch.word]}  ${Math.round(p.patternMatch.score * 100)}%`
+      : 'No dictionary match';
 
     ctx.textBaseline = 'top';
     ctx.font      = 'bold 15px "Courier New", monospace';
     ctx.fillStyle = COLORS.morseText;
-    ctx.fillText(`DECODED › ${decoded}`, 12, height - botH + 8);
+    ctx.fillText(`DECODED › ${dictWord}`, 12, height - botH + 8);
 
     ctx.font      = '12px "Courier New", monospace';
     ctx.fillStyle = COLORS.morseCode;
-    ctx.fillText(`CURRENT › ${p.decoder.currentCode_}`, 12, height - botH + 30);
+    ctx.fillText(`DETAIL › ${dictInfo}`, 12, height - botH + 30);
 
     ctx.restore();
+  }
+
+  private drawAudioSpectrogram(p: RenderParams, width: number): void {
+    const { ctx } = this;
+
+    if (p.audioSpectrum && p.audioSpectrum.length > 0) {
+      this.specHistory.push(this.downsampleSpectrum(p.audioSpectrum, this.specBins));
+      if (this.specHistory.length > this.specWidth) {
+        this.specHistory.shift();
+      }
+    }
+
+    const x0 = width - this.specWidth - 10;
+    const y0 = 10;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.62)';
+    this.roundRect(x0 - 8, y0 - 8, this.specWidth + 16, this.specHeight + 38, 6);
+    ctx.fill();
+
+    for (let x = 0; x < this.specHistory.length; x++) {
+      const col = this.specHistory[x];
+      for (let y = 0; y < col.length; y++) {
+        const value = col[y] / 255;
+        const hue = 220 - value * 200;
+        const sat = 85;
+        const light = 12 + value * 55;
+        ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
+        const px = x0 + x;
+        const py = y0 + (col.length - 1 - y) * (this.specHeight / col.length);
+        ctx.fillRect(px, py, 1, Math.ceil(this.specHeight / col.length));
+      }
+    }
+
+    ctx.strokeStyle = 'rgba(0,255,136,0.45)';
+    ctx.strokeRect(x0, y0, this.specWidth, this.specHeight);
+
+    const centerHz = Math.max(1, Math.min(this.specMaxHz, p.audioBandpassCenter));
+    const q = Math.max(0.01, p.audioBandpassQ);
+    const bandwidth = centerHz / q;
+    const minHz = Math.max(0, centerHz - bandwidth / 2);
+    const maxHz = Math.min(this.specMaxHz, centerHz + bandwidth / 2);
+
+    this.drawSpecGuideLine(ctx, x0, y0, this.specWidth, minHz, 'rgba(255,204,0,0.85)');
+    this.drawSpecGuideLine(ctx, x0, y0, this.specWidth, centerHz, 'rgba(0,255,136,0.95)');
+    this.drawSpecGuideLine(ctx, x0, y0, this.specWidth, maxHz, 'rgba(255,204,0,0.85)');
+
+    ctx.font = '11px "Courier New", monospace';
+    ctx.fillStyle = '#00ff88';
+    ctx.fillText('AUDIO SPECTROGRAM', x0, y0 + this.specHeight + 6);
+
+    ctx.fillStyle = '#d8d8d8';
+    ctx.fillText(`0–${this.specMaxHz} Hz`, x0, y0 + this.specHeight + 20);
+    ctx.fillText(`BP ${Math.round(centerHz)}Hz  Q ${q.toFixed(1)}`, x0, y0 + this.specHeight + 32);
+
+    ctx.restore();
+  }
+
+  private drawSpecGuideLine(
+    ctx: CanvasRenderingContext2D,
+    x0: number,
+    y0: number,
+    width: number,
+    frequencyHz: number,
+    color: string,
+  ): void {
+    const t = 1 - Math.max(0, Math.min(this.specMaxHz, frequencyHz)) / this.specMaxHz;
+    const y = y0 + t * this.specHeight;
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 + width, y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private downsampleSpectrum(src: Uint8Array, bins: number): Uint8Array {
+    if (bins <= 0 || src.length === 0) return new Uint8Array(0);
+    const out = new Uint8Array(bins);
+    const scale = src.length / bins;
+
+    for (let i = 0; i < bins; i++) {
+      const start = Math.floor(i * scale);
+      const end = Math.max(start + 1, Math.floor((i + 1) * scale));
+      let sum = 0;
+      let count = 0;
+      for (let j = start; j < end && j < src.length; j++) {
+        sum += src[j];
+        count++;
+      }
+      out[i] = count > 0 ? Math.round(sum / count) : 0;
+    }
+
+    return out;
   }
 
   /** Tiny helper – draws a rect with optional rounded corners */

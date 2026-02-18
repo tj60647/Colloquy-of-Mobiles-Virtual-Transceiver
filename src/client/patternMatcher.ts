@@ -10,7 +10,7 @@
  * when its score meets the threshold.
  */
 
-import { DICTIONARY, DICT_WORDS, PATTERN_LEN, type DictWord } from '../shared/dictionary.js';
+import { DICT_WORDS, TX_CYCLE_LEN, getTransmitBit, type DictWord } from '../shared/dictionary.js';
 
 export interface MatchResult {
   word:      DictWord;
@@ -21,9 +21,9 @@ export interface MatchResult {
 }
 
 /** Minimum match fraction required to report a hit. */
-const THRESHOLD = 0.875; // 35 / 40 segments correct
+const THRESHOLD = 0.875;
 
-const BUF_LEN = PATTERN_LEN * 2; // enough room to try every alignment
+const BUF_LEN = TX_CYCLE_LEN * 2;
 
 export class PatternMatcher {
   private buf: Uint8Array = new Uint8Array(BUF_LEN);
@@ -37,7 +37,7 @@ export class PatternMatcher {
     this.head = (this.head + 1) % BUF_LEN;
     if (this.count < BUF_LEN) this.count++;
 
-    if (this.count >= PATTERN_LEN) {
+    if (this.count >= TX_CYCLE_LEN) {
       this.lastMatch = this.findBest();
     }
   }
@@ -48,22 +48,21 @@ export class PatternMatcher {
    */
   private findBest(): MatchResult | null {
     const available = this.count; // how many valid samples we have
-    const maxAlignments = Math.min(PATTERN_LEN, available - PATTERN_LEN + 1);
+    const maxAlignments = Math.min(TX_CYCLE_LEN, available - TX_CYCLE_LEN + 1);
 
     let bestScore = 0;
     let bestWord: DictWord | null = null;
     let bestOffset = 0;
 
     for (const word of DICT_WORDS) {
-      const pattern = DICTIONARY[word];
-
       for (let offset = 0; offset < maxAlignments; offset++) {
         let matches = 0;
-        for (let i = 0; i < PATTERN_LEN; i++) {
+        for (let i = 0; i < TX_CYCLE_LEN; i++) {
           const bufIdx = (this.head - available + offset + i + BUF_LEN * 2) % BUF_LEN;
-          if (this.buf[bufIdx] === pattern[i]) matches++;
+          const expected = getTransmitBit(word, i) ? 1 : 0;
+          if (this.buf[bufIdx] === expected) matches++;
         }
-        const score = matches / PATTERN_LEN;
+        const score = matches / TX_CYCLE_LEN;
         if (score > bestScore) {
           bestScore = score;
           bestWord  = word;

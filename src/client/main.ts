@@ -17,6 +17,7 @@ import { BackgroundModel  } from './background.js';
 import { SensitivityZone  } from './sensitivityZone.js';
 import { FovMapper         } from './fovMapper.js';
 import { LightDetector    } from './detector.js';
+import { AudioDetector    } from './audioDetector.js';
 import { RingBuffer        } from './ringBuffer.js';
 import { PatternDecoder   } from './patternDecoder.js';
 import { PatternMatcher   } from './patternMatcher.js';
@@ -24,9 +25,8 @@ import { Renderer          } from './renderer.js';
 import { WsClient          } from './wsClient.js';
 import { UI                } from './ui.js';
 import { DICT_LABELS       } from '../shared/dictionary.js';
+import { TX_CYCLE_LEN } from '../shared/dictionary.js';
 import type { LightReading } from '../shared/types.js';
-
-const SAMPLE_INTERVAL_MS = 1000 / 40; // 25 ms → 40 Hz
 
 function isLikelyMobile(): boolean {
   return window.matchMedia('(max-width: 900px)').matches;
@@ -118,9 +118,10 @@ async function main(): Promise<void> {
   const zone    = new SensitivityZone(camera.width, camera.height, ui.config.zone, ui.config.fov);
   const fov     = new FovMapper(ui.config.fov);
   const det     = new LightDetector(ui.config.threshold);
-  const rb      = new RingBuffer<boolean>(240);
+  const rb      = new RingBuffer<boolean>(TX_CYCLE_LEN);
   const decoder = new PatternDecoder(ui.config.morseUnitMs);
   const matcher = new PatternMatcher();
+  const audioDet = new AudioDetector(ui.config.audioBandpassCenter, ui.config.audioBandpassQ);
   const renderer= new Renderer(canvas, ctx);
 
   const matchEl = document.getElementById('pattern-match');
@@ -138,6 +139,7 @@ async function main(): Promise<void> {
   function shutdown(): void {
     wsClient.disconnect();
     camera.stop();
+    void audioDet.stop();
   }
 
   window.addEventListener('beforeunload', shutdown);
@@ -150,6 +152,8 @@ async function main(): Promise<void> {
   // ── Main loop ─────────────────────────────────────────────────────────────
   let lastSampleTs = 0;
   let lastReading: LightReading | null = null;
+  let audioInitPending = false;
+  let lastAudioSpectrum: Uint8Array | null = null;
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -173,6 +177,7 @@ async function main(): Promise<void> {
     det.threshold        = ui.config.threshold;
     decoder.unitMs       = ui.config.morseUnitMs;
     zone.updateDimensions(camera.width, camera.height);
+    audioDet.setBandpass(ui.config.audioBandpassCenter, ui.config.audioBandpassQ);
 
     // Advance zone oscillation
     zone.update(timestamp);
@@ -185,12 +190,70 @@ async function main(): Promise<void> {
     bgModel.update(imageData);
 
     // ── 40 Hz detection tick ────────────────────────────────────────────────
-    if (timestamp - lastSampleTs >= SAMPLE_INTERVAL_MS) {
+    const sampleIntervalMs = 1000 / ui.config.sampleRateHz;
+    if (timestamp - lastSampleTs >= sampleIntervalMs) {
       lastSampleTs = timestamp;
 
-      if (bgModel.isInitialized) {
+      if (ui.config.detectorMode === 'light') {
+        if (!bgModel.isInitialized) return;
+        lastAudioSpectrum = null;
+
         const reading = det.detect(imageData, bgModel, zone, fov, timestamp);
-        lastReading   = reading;
+        lastReading = reading;
+
+        rb.push(reading.detected);
+        decoder.addSample(reading.detected, timestamp);
+        matcher.addSample(reading.detected);
+
+        // Auto-flush Morse decoder on long silences
+        decoder.flush(timestamp);
+
+        // Update pattern match display
+        if (matchEl) {
+          const m = matcher.lastMatch;
+          if (m) {
+            matchWordEl && (matchWordEl.textContent = m.word);
+            matchScoreEl && (matchScoreEl.textContent = `${DICT_LABELS[m.word]}  ${Math.round(m.score * 100)}%`);
+            matchEl.classList.add('visible');
+          } else {
+            matchEl.classList.remove('visible');
+          }
+        }
+
+        wsClient.sendReading(reading);
+      } else {
+        if (!audioDet.isInitialized) {
+          if (audioInitPending) return;
+          audioInitPending = true;
+          setStatus('Audio mode: requesting microphone access…');
+          void audioDet.initialize().then(() => {
+            audioInitPending = false;
+            setStatus('Audio mode active.');
+          }).catch((err) => {
+            audioInitPending = false;
+            setStatus(`Audio mode error: ${String(err)}`);
+          });
+          return;
+        }
+
+        const a = audioDet.detect(ui.config.audioThreshold);
+        lastAudioSpectrum = audioDet.getSpectrumSnapshot(128, 3000);
+        const { xAngle, yAngle } = fov.pixelToAngle(zone.centerX, zone.centerY, camera.width, camera.height);
+        const reading: LightReading = {
+          timestamp,
+          frameX: Math.round(zone.centerX),
+          frameY: Math.round(zone.centerY),
+          xAngle: Math.round(xAngle * 10) / 10,
+          yAngle: Math.round(yAngle * 10) / 10,
+          detected: a.detected,
+          brightness: a.level,
+          background: a.baseline,
+          delta: a.delta,
+          zoneX: zone.centerX,
+          zoneY: zone.centerY,
+          zoneRadius: zone.radius,
+        };
+        lastReading = reading;
 
         rb.push(reading.detected);
         decoder.addSample(reading.detected, timestamp);
@@ -224,7 +287,12 @@ async function main(): Promise<void> {
       ringBuffer:      rb,
       lastReading,
       decoder,
-      threshold:       ui.config.threshold,
+      patternMatch:    matcher.lastMatch,
+      detectorMode:    ui.config.detectorMode,
+      audioSpectrum:   lastAudioSpectrum,
+      audioBandpassCenter: ui.config.audioBandpassCenter,
+      audioBandpassQ:  ui.config.audioBandpassQ,
+      threshold:       ui.config.detectorMode === 'audio' ? ui.config.audioThreshold : ui.config.threshold,
       wsConnected:     wsClient.connected,
     });
   }

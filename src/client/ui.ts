@@ -1,12 +1,18 @@
 import type { ViewMode } from './renderer.js';
 import type { ZoneConfig, FovConfig, MotionUnit } from '../shared/types.js';
+import { AUDIO_BANDPASS_DEFAULT_CENTER, AUDIO_BANDPASS_DEFAULT_Q } from '../shared/dictionary.js';
 
 /**
  * All user-tunable application configuration in one flat object.
  * The main loop reads this every frame – no reactive subscription needed.
  */
 export interface AppConfig {
+  detectorMode:    'light' | 'audio';
+  sampleRateHz:    20 | 40;
   threshold:       number;   // detection delta threshold (0–255)
+  audioThreshold:  number;   // audio delta threshold (0–255)
+  audioBandpassCenter: number; // audio detector bandpass center frequency (Hz)
+  audioBandpassQ:      number; // audio detector bandpass Q
   viewMode:        ViewMode; // 'live' | 'background'
   backgroundAlpha: number;   // EMA learning rate (0–1)
   morseUnitMs:     number;   // Morse unit duration in ms
@@ -25,7 +31,12 @@ export interface AppConfig {
  */
 export class UI {
   readonly config: AppConfig = {
+    detectorMode:    'light',
+    sampleRateHz:    40,
     threshold:       30,
+    audioThreshold:  20,
+    audioBandpassCenter: AUDIO_BANDPASS_DEFAULT_CENTER,
+    audioBandpassQ:      AUDIO_BANDPASS_DEFAULT_Q,
     viewMode:        'live',
     backgroundAlpha: 0.03,
     morseUnitMs:     100,
@@ -52,8 +63,25 @@ export class UI {
 
   private bind(): void {
     // ── Detection ────────────────────────────────────────────────────────────
+    this.select('detector-mode', v => {
+      this.config.detectorMode = v === 'audio' ? 'audio' : 'light';
+    });
+
+    this.select('sample-rate', v => {
+      this.config.sampleRateHz = v === '20' ? 20 : 40;
+    });
+
     this.slider('threshold',   0, 255, 1,     this.config.threshold,
       v => { this.config.threshold = v; });
+
+    this.slider('audio-threshold',   0, 255, 1, this.config.audioThreshold,
+      v => { this.config.audioThreshold = v; });
+
+    this.slider('audio-bp-center', 500, 6000, 10, this.config.audioBandpassCenter,
+      v => { this.config.audioBandpassCenter = v; });
+
+    this.slider('audio-bp-q', 0.2, 20, 0.1, this.config.audioBandpassQ,
+      v => { this.config.audioBandpassQ = v; });
 
     // ── View toggle ──────────────────────────────────────────────────────────
     this.toggle('view-mode-bg', v => {
@@ -123,26 +151,50 @@ export class UI {
     set:     (v: number) => void,
   ): void {
     const el    = document.getElementById(id) as HTMLInputElement | null;
-    const label = document.getElementById(`${id}-val`);
+    let label = document.getElementById(`${id}-val`);
     if (!el) return;
+
+    if (!label) {
+      const row = el.closest('.ctrl-row');
+      if (row) {
+        const fallback = document.createElement('span');
+        fallback.id = `${id}-val`;
+        fallback.className = 'ctrl-val';
+        row.appendChild(fallback);
+        label = fallback;
+      }
+    }
 
     el.min   = String(min);
     el.max   = String(max);
     el.step  = String(step);
     el.value = String(initial);
-    if (label) label.textContent = String(initial);
+    if (label) label.textContent = this.formatSliderValue(initial, step);
 
     el.addEventListener('input', () => {
       const v = parseFloat(el.value);
       set(v);
-      if (label) label.textContent = el.value;
+      if (label) label.textContent = this.formatSliderValue(v, step);
     });
+  }
+
+  private formatSliderValue(value: number, step: number): string {
+    if (step >= 1) return String(Math.round(value));
+    if (step >= 0.1) return value.toFixed(1);
+    if (step >= 0.01) return value.toFixed(2);
+    return value.toFixed(3);
   }
 
   private toggle(id: string, set: (checked: boolean) => void): void {
     const el = document.getElementById(id) as HTMLInputElement | null;
     if (!el) return;
     el.addEventListener('change', () => set(el.checked));
+  }
+
+  private select(id: string, set: (value: string) => void): void {
+    const el = document.getElementById(id) as HTMLSelectElement | null;
+    if (!el) return;
+    el.addEventListener('change', () => set(el.value));
   }
 
   /**

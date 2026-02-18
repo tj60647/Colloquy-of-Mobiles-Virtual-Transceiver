@@ -18,6 +18,12 @@ export const SEGMENT_MS = 25;
 /** Total length of every pattern in segments. */
 export const PATTERN_LEN = 40;
 
+/** Listening window length in segments (equal to transmit word duration). */
+export const LISTEN_LEN = PATTERN_LEN;
+
+/** Full transmit cycle length: TX word + LISTEN window. */
+export const TX_CYCLE_LEN = PATTERN_LEN + LISTEN_LEN;
+
 export type DictWord = 'I_O' | 'I_P' | 'I_OP' | 'II_O' | 'II_P' | 'II_OP' | 'I_R' | 'II_R';
 
 export const DICTIONARY: Readonly<Record<DictWord, readonly number[]>> = {
@@ -33,6 +39,16 @@ export const DICTIONARY: Readonly<Record<DictWord, readonly number[]>> = {
 
 export const DICT_WORDS = Object.keys(DICTIONARY) as DictWord[];
 
+/** Audio-tone frequencies used by the transmitter sound mode. */
+export const AUDIO_TONE_FREQS = [1760, 1976, 2093, 2349, 2637] as const;
+
+/** Default bandpass centre based on transmitter tone set. */
+export const AUDIO_BANDPASS_DEFAULT_CENTER =
+  Math.round((AUDIO_TONE_FREQS[0] + AUDIO_TONE_FREQS[AUDIO_TONE_FREQS.length - 1]) / 2);
+
+/** Default bandpass quality factor for audio detection mode. */
+export const AUDIO_BANDPASS_DEFAULT_Q = 1.5;
+
 /** Human-readable label for each word. */
 export const DICT_LABELS: Readonly<Record<DictWord, string>> = {
   I_O:   'Male I – drive O',
@@ -44,3 +60,15 @@ export const DICT_LABELS: Readonly<Record<DictWord, string>> = {
   I_R:   'Male I – reinforcement',
   II_R:  'Male II – reinforcement',
 };
+
+/**
+ * Returns whether the transmitter output should be ON for a cycle segment.
+ * Segment index is interpreted over the full TX/LISTEN cycle.
+ */
+export function getTransmitBit(word: DictWord, segmentIndex: number, invert = false): boolean {
+  const idx = ((segmentIndex % TX_CYCLE_LEN) + TX_CYCLE_LEN) % TX_CYCLE_LEN;
+  if (idx >= PATTERN_LEN) return false;
+
+  const bitOn = DICTIONARY[word][idx] === 1;
+  return invert ? !bitOn : bitOn;
+}

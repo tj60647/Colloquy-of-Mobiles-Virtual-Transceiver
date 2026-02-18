@@ -11,19 +11,20 @@
  */
 
 import {
-  DICTIONARY,
+  AUDIO_TONE_FREQS,
   DICT_WORDS,
   DICT_LABELS,
   SEGMENT_MS,
-  PATTERN_LEN,
+  LISTEN_LEN,
+  TX_CYCLE_LEN,
+  getTransmitBit,
   type DictWord,
 } from '../shared/dictionary.js';
 
 // ── Tone frequencies ──────────────────────────────────────────────────────────
 
-const TONE_FREQS = [1760, 1976, 2093, 2349, 2637] as const;
-const LISTEN_SEGMENTS = PATTERN_LEN;
-const TOTAL_SEGMENTS = PATTERN_LEN + LISTEN_SEGMENTS;
+const TONE_FREQS = AUDIO_TONE_FREQS;
+const TOTAL_SEGMENTS = TX_CYCLE_LEN;
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,8 @@ const camPreview   = document.getElementById('cam-preview') as HTMLVideoElement;
 const modeFlashBtn = document.getElementById('mode-flash') as HTMLButtonElement;
 const modeSoundBtn = document.getElementById('mode-sound') as HTMLButtonElement;
 const invertToggle = document.getElementById('invert-toggle') as HTMLInputElement;
-const rateToggle = document.getElementById('rate-toggle') as HTMLSelectElement;
+const rateToggle = document.getElementById('rate-toggle') as HTMLInputElement;
+const rateDisplay = document.getElementById('rate-display')!;
 const freqSection  = document.getElementById('freq-section')!;
 const freqSlider   = document.getElementById('freq-slider') as HTMLInputElement;
 const freqDisplay  = document.getElementById('freq-display')!;
@@ -131,8 +133,9 @@ invertToggle?.addEventListener('change', () => {
   }
 });
 
-rateToggle?.addEventListener('change', () => {
-  txRateHz = rateToggle.value === '20' ? 20 : 40;
+rateToggle?.addEventListener('input', () => {
+  txRateHz = rateToggle.value === '1' ? 20 : 40;
+  rateDisplay.textContent = `${txRateHz} Hz`;
   if (running) {
     restartLoop();
   }
@@ -161,21 +164,15 @@ for (let i = 0; i < TOTAL_SEGMENTS; i++) {
 }
 
 function renderPatternBar(word: DictWord, activeSeg: number): void {
-  const pattern = DICTIONARY[word];
   for (let i = 0; i < TOTAL_SEGMENTS; i++) {
-    const isListening = i >= PATTERN_LEN;
-    const isOn = !isListening && getTxOn(pattern, i);
+    const isListening = i >= LISTEN_LEN;
+    const isOn = getTransmitBit(word, i, invertTransmission);
     segEls[i].className =
       'seg' +
       (isOn ? ' on' : '') +
       (isListening ? ' listening' : '') +
       (i === activeSeg ? ' active' : '');
   }
-}
-
-function getTxOn(pattern: readonly number[], idx: number): boolean {
-  const bitOn = pattern[idx] === 1;
-  return invertTransmission ? !bitOn : bitOn;
 }
 
 selectWord('I_O');
@@ -308,10 +305,8 @@ function tick(): void {
   const elapsed    = performance.now() - startTime;
   const posInLoop  = elapsed % totalMs;
   const segIdx     = Math.floor(posInLoop / segmentMs);
-  const pattern    = DICTIONARY[selectedWord];
-  const inListenWindow = segIdx >= PATTERN_LEN;
-  const patternIdx = segIdx < PATTERN_LEN ? segIdx : segIdx - PATTERN_LEN;
-  const torchOn    = !inListenWindow && getTxOn(pattern, patternIdx);
+  const inListenWindow = segIdx >= LISTEN_LEN;
+  const torchOn    = getTransmitBit(selectedWord, segIdx, invertTransmission);
 
   // Update output
   if (mode === 'flash') {

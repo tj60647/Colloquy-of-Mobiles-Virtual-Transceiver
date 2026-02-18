@@ -251,6 +251,25 @@
       font-size: 0.82rem;
       cursor: pointer;
     }
+    .rate-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 130px;
+      justify-content: flex-end;
+    }
+    #rate-toggle {
+      width: 78px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    #rate-display {
+      min-width: 40px;
+      text-align: right;
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.82rem;
+    }
 
     /* ── Frequency selector ──────────────────────────── */
     #freq-section {
@@ -306,10 +325,10 @@
 
     <label class="invert-row" for="rate-toggle">
       <span>Rate</span>
-      <select id="rate-toggle" class="rate-select">
-        <option value="40" selected>40 Hz</option>
-        <option value="20">20 Hz</option>
-      </select>
+      <div class="rate-control">
+        <input type="range" id="rate-toggle" min="0" max="1" step="1" value="0">
+        <span id="rate-display">40 Hz</span>
+      </div>
     </label>
   </div>
 

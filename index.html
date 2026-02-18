@@ -37,9 +37,38 @@
     <div class="section">
       <div class="section-label">Detection</div>
       <div class="ctrl-row">
+        <label for="detector-mode">Mode</label>
+        <select id="detector-mode" class="cam-select">
+          <option value="light" selected>Light</option>
+          <option value="audio">Audio</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <label for="sample-rate">Sample Hz</label>
+        <select id="sample-rate" class="cam-select">
+          <option value="40" selected>40</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
         <label for="threshold">Threshold</label>
         <input type="range" id="threshold" />
         <span class="ctrl-val" id="threshold-val">30</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="audio-threshold">Audio thr</label>
+        <input type="range" id="audio-threshold" />
+        <span class="ctrl-val" id="audio-threshold-val">20</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="audio-bp-center">BP Hz</label>
+        <input type="range" id="audio-bp-center" />
+        <span class="ctrl-val" id="audio-bp-center-val">2200</span>
+      </div>
+      <div class="ctrl-row">
+        <label for="audio-bp-q">BP Q</label>
+        <input type="range" id="audio-bp-q" />
+        <span class="ctrl-val" id="audio-bp-q-val">1.5</span>
       </div>
       <div class="btn-row">
         <button id="btn-reset-bg" title="Reseed background model from current frame">
