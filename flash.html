@@ -53,6 +53,35 @@
       justify-content: center;
       font-size: 2.2rem;
     }
+        .indicator-row {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+          width: 100%;
+          max-width: 380px;
+        }
+
+        #start-btn {
+          width: 100px;
+          height: 100px;
+          border-radius: 50%;
+          border: none;
+          cursor: pointer;
+          background: var(--accent);
+          color: #000;
+          font-size: 0.9rem;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          transition: opacity 0.15s, transform 0.1s;
+          text-align: center;
+          line-height: 1.2;
+          padding: 8px;
+        }
+        #start-btn:active { transform: scale(0.98); }
+        #start-btn:disabled { opacity: 0.4; cursor: default; }
+        #start-btn.running  { background: var(--danger); color: #fff; }
+
     #torch-indicator.on {
       background: var(--on);
       box-shadow: 0 0 40px 10px rgba(255,221,0,0.6);
@@ -109,23 +138,6 @@
     .seg.listening.active { outline-color: #7dd3fc; }
 
     /* ── Controls ────────────────────────────────────── */
-    #start-btn {
-      width: 100%;
-      max-width: 380px;
-      padding: 16px;
-      font-size: 1rem;
-      font-weight: 700;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      background: var(--accent);
-      color: #000;
-      letter-spacing: 0.04em;
-      transition: opacity 0.15s;
-    }
-    #start-btn:disabled { opacity: 0.4; cursor: default; }
-    #start-btn.running  { background: var(--danger); color: #fff; }
-
     /* ── Status ──────────────────────────────────────── */
     #status {
       font-size: 0.88rem;
@@ -301,7 +313,10 @@
     </label>
   </div>
 
-  <div id="torch-indicator">💡</div>
+  <div class="indicator-row">
+    <div id="torch-indicator">💡</div>
+    <button id="start-btn">Start Flashing</button>
+  </div>
 
   <p id="status">Select a word and tap Start.</p>
 
@@ -319,8 +334,6 @@
   </div>
 
   <div id="pattern-bar"></div>
-
-  <button id="start-btn">Start Flashing</button>
 
   <div id="loop-count"></div>
 
