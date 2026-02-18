@@ -179,18 +179,6 @@ function selectWord(word: DictWord): void {
 // ── Mode switch ───────────────────────────────────────────────────────────────
 
 function setMode(m: TransmitMode): void {
-  if (m === 'flash' && !canUseMediaDevices) {
-    mode = 'sound';
-    modeFlashBtn.classList.remove('active');
-    modeSoundBtn.classList.add('active');
-    freqSection.style.display = 'flex';
-    indicator.textContent = '🔊';
-    startBtn.textContent = 'Start Tone';
-    setStatus('Flash mode unavailable here (HTTPS/camera API required). Switched to sound mode.', true);
-    persistTransmitterConfig();
-    return;
-  }
-
   if (running) stop();
   mode = m;
   modeFlashBtn.classList.toggle('active', m === 'flash');
@@ -497,8 +485,7 @@ function setStatus(msg: string, isError = false): void {
 }
 
 if (!canUseMediaDevices) {
-  modeFlashBtn.disabled = true;
-  setMode('sound');
+  setStatus('Flash may require HTTPS on this device/browser. If it fails, switch to sound mode.', true);
 } else if (!likelyTorchDevice) {
   setMode('sound');
   setStatus('Sound mode selected by default. Flash mode is mainly supported on Android Chrome.');

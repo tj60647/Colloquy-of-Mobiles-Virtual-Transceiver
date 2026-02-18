@@ -45,8 +45,8 @@ export class UI {
     zone: {
       radius: 50,
       unit:   'deg',
-      axisX: { rangeMin: -22, rangeMax: 22, maxVelocity: 25, maxAcceleration: 40 },
-      axisY: { rangeMin: -14, rangeMax: 14, maxVelocity: 18, maxAcceleration: 30 },
+      axisX: { rangeMin: -22, rangeMax: 22, maxVelocity: 15, maxAcceleration: 15 },
+      axisY: { rangeMin: 0, rangeMax: 0, maxVelocity: 15, maxAcceleration: 15 },
     },
     fov: {
       hFov: 60,
@@ -112,7 +112,7 @@ export class UI {
       v => { this.config.zone.axisX.rangeMax = v; });
     this.slider('x-max-vel', 0.5, 180, 0.5, this.config.zone.axisX.maxVelocity,
       v => { this.config.zone.axisX.maxVelocity = v; });
-    this.slider('x-max-acc', 1, 360, 1, this.config.zone.axisX.maxAcceleration,
+    this.slider('x-max-acc', 1, 360, 0.1, this.config.zone.axisX.maxAcceleration,
       v => { this.config.zone.axisX.maxAcceleration = v; });
 
     // ── Y axis motion profile ────────────────────────────────────────────────
@@ -122,7 +122,7 @@ export class UI {
       v => { this.config.zone.axisY.rangeMax = v; });
     this.slider('y-max-vel', 0.5, 180, 0.5, this.config.zone.axisY.maxVelocity,
       v => { this.config.zone.axisY.maxVelocity = v; });
-    this.slider('y-max-acc', 1, 360, 1, this.config.zone.axisY.maxAcceleration,
+    this.slider('y-max-acc', 1, 360, 0.1, this.config.zone.axisY.maxAcceleration,
       v => { this.config.zone.axisY.maxAcceleration = v; });
 
     // ── FOV ──────────────────────────────────────────────────────────────────

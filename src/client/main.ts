@@ -232,6 +232,7 @@ async function main(): Promise<void> {
   const fov     = new FovMapper(ui.config.fov);
   const det     = new LightDetector(ui.config.threshold);
   const rb      = new RingBuffer<boolean>(TX_CYCLE_LEN);
+  for (let i = 0; i < TX_CYCLE_LEN; i++) rb.push(false);
   const decoder = new PatternDecoder(ui.config.morseUnitMs);
   const matcher = new PatternMatcher();
   const audioDet = new AudioDetector(ui.config.audioBandpassCenter, ui.config.audioBandpassQ);
@@ -260,7 +261,12 @@ async function main(): Promise<void> {
 
   // ── UI callbacks ──────────────────────────────────────────────────────────
   ui.onResetBackground = () => bgModel.reset();
-  ui.onResetDecoder    = () => { decoder.reset(); matcher.reset(); };
+  ui.onResetDecoder    = () => {
+    decoder.reset();
+    matcher.reset();
+    rb.clear();
+    for (let i = 0; i < TX_CYCLE_LEN; i++) rb.push(false);
+  };
 
   // ── Main loop ─────────────────────────────────────────────────────────────
   let lastSampleTs = 0;
