@@ -1,0 +1,26 @@
+{
+  "controls": {
+    "detector-mode": "light",
+    "sample-rate": "40",
+    "grayscale-processing": true,
+    "threshold": "30",
+    "audio-threshold": "20",
+    "audio-bp-center": "2200",
+    "audio-bp-q": "1.5",
+    "view-mode-bg": false,
+    "bg-alpha": "0.03",
+    "zone-radius": "50",
+    "motion-unit-rad": false,
+    "x-range-min": "-22",
+    "x-range-max": "22",
+    "x-max-vel": "25",
+    "x-max-acc": "40",
+    "y-range-min": "-14",
+    "y-range-max": "14",
+    "y-max-vel": "18",
+    "y-max-acc": "30",
+    "h-fov": "60",
+    "v-fov": "45",
+    "morse-unit": "100"
+  }
+}

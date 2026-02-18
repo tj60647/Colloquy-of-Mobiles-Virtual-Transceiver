@@ -63,8 +63,12 @@ export class Renderer {
     const { ctx } = this;
     const { width, height } = this.canvas;
 
+    this.updateSpecHistory(p.audioSpectrum, Math.max(this.specWidth, width));
+
     // 1 ── Video or background frame ─────────────────────────────────────────
-    if (p.viewMode === 'live') {
+    if (p.detectorMode === 'audio') {
+      this.drawAudioBackground(width, height);
+    } else if (p.viewMode === 'live') {
       ctx.putImageData(p.imageData, 0, 0);
     } else if (p.backgroundModel.isInitialized) {
       ctx.putImageData(p.backgroundModel.getBackgroundImageData(ctx), 0, 0);
@@ -233,13 +237,6 @@ export class Renderer {
   private drawAudioSpectrogram(p: RenderParams, width: number): void {
     const { ctx } = this;
 
-    if (p.audioSpectrum && p.audioSpectrum.length > 0) {
-      this.specHistory.push(this.downsampleSpectrum(p.audioSpectrum, this.specBins));
-      if (this.specHistory.length > this.specWidth) {
-        this.specHistory.shift();
-      }
-    }
-
     const x0 = width - this.specWidth - 10;
     const y0 = 10;
 
@@ -284,6 +281,41 @@ export class Renderer {
     ctx.fillText(`BP ${Math.round(centerHz)}Hz  Q ${q.toFixed(1)}`, x0, y0 + this.specHeight + 32);
 
     ctx.restore();
+  }
+
+  private updateSpecHistory(spectrum: Uint8Array | null, maxColumns: number): void {
+    if (!spectrum || spectrum.length === 0) return;
+
+    this.specHistory.push(this.downsampleSpectrum(spectrum, this.specBins));
+    const cap = Math.max(this.specWidth, maxColumns);
+    if (this.specHistory.length > cap) {
+      this.specHistory.splice(0, this.specHistory.length - cap);
+    }
+  }
+
+  private drawAudioBackground(width: number, height: number): void {
+    const { ctx } = this;
+    ctx.fillStyle = '#05070b';
+    ctx.fillRect(0, 0, width, height);
+
+    if (this.specHistory.length === 0) return;
+
+    for (let x = 0; x < width; x++) {
+      const sx = Math.floor((x / Math.max(1, width - 1)) * (this.specHistory.length - 1));
+      const col = this.specHistory[sx];
+      if (!col) continue;
+
+      for (let y = 0; y < col.length; y++) {
+        const value = col[y] / 255;
+        const hue = 225 - value * 190;
+        const sat = 85;
+        const light = 5 + value * 42;
+        ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
+
+        const py = (col.length - 1 - y) * (height / col.length);
+        ctx.fillRect(x, py, 1, Math.ceil(height / col.length));
+      }
+    }
   }
 
   private drawSpecGuideLine(

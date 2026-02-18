@@ -28,6 +28,113 @@ import { DICT_LABELS       } from '../shared/dictionary.js';
 import { TX_CYCLE_LEN } from '../shared/dictionary.js';
 import type { LightReading } from '../shared/types.js';
 
+const SENSOR_CONFIG_URL = '/config/sensor.config.json';
+const SENSOR_CONFIG_STORAGE_KEY = 'vcl.sensor.config.v1';
+
+const SENSOR_CONTROL_IDS = [
+  'detector-mode',
+  'sample-rate',
+  'grayscale-processing',
+  'threshold',
+  'audio-threshold',
+  'audio-bp-center',
+  'audio-bp-q',
+  'view-mode-bg',
+  'bg-alpha',
+  'zone-radius',
+  'motion-unit-rad',
+  'x-range-min',
+  'x-range-max',
+  'x-max-vel',
+  'x-max-acc',
+  'y-range-min',
+  'y-range-max',
+  'y-max-vel',
+  'y-max-acc',
+  'h-fov',
+  'v-fov',
+  'morse-unit',
+] as const;
+
+type SensorControlMap = Record<string, string | boolean>;
+
+function toGrayscaleInPlace(imageData: ImageData): void {
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const y = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+    d[i] = y;
+    d[i + 1] = y;
+    d[i + 2] = y;
+  }
+}
+
+async function loadSensorFileConfig(): Promise<SensorControlMap> {
+  try {
+    const res = await fetch(SENSOR_CONFIG_URL, { cache: 'no-store' });
+    if (!res.ok) return {};
+    const body = (await res.json()) as { controls?: SensorControlMap };
+    return body.controls ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function loadSensorLocalConfig(): SensorControlMap {
+  try {
+    const raw = localStorage.getItem(SENSOR_CONFIG_STORAGE_KEY);
+    if (!raw) return {};
+    return (JSON.parse(raw) as { controls?: SensorControlMap }).controls ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function collectSensorControls(): SensorControlMap {
+  const out: SensorControlMap = {};
+  for (const id of SENSOR_CONTROL_IDS) {
+    const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (!el) continue;
+    if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      out[id] = el.checked;
+    } else {
+      out[id] = (el as HTMLInputElement | HTMLSelectElement).value;
+    }
+  }
+  return out;
+}
+
+function applySensorControls(values: SensorControlMap): void {
+  for (const [id, value] of Object.entries(values)) {
+    const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (!el) continue;
+
+    if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      el.checked = Boolean(value);
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      el.value = String(value);
+      const evt = el instanceof HTMLSelectElement ? 'change' : 'input';
+      el.dispatchEvent(new Event(evt, { bubbles: true }));
+    }
+  }
+}
+
+function installSensorConfigPersistence(): void {
+  const persist = () => {
+    const controls = collectSensorControls();
+    localStorage.setItem(SENSOR_CONFIG_STORAGE_KEY, JSON.stringify({ controls }));
+  };
+
+  for (const id of SENSOR_CONTROL_IDS) {
+    const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (!el) continue;
+    const evt = el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && el.type === 'checkbox')
+      ? 'change'
+      : 'input';
+    el.addEventListener(evt, persist);
+  }
+}
+
 function isLikelyMobile(): boolean {
   return window.matchMedia('(max-width: 900px)').matches;
 }
@@ -114,6 +221,12 @@ async function main(): Promise<void> {
 
   // ── Subsystems ────────────────────────────────────────────────────────────
   const ui      = new UI();
+
+  const fileControls = await loadSensorFileConfig();
+  const localControls = loadSensorLocalConfig();
+  applySensorControls({ ...fileControls, ...localControls });
+  installSensorConfigPersistence();
+
   const bgModel = new BackgroundModel(ui.config.backgroundAlpha);
   const zone    = new SensitivityZone(camera.width, camera.height, ui.config.zone, ui.config.fov);
   const fov     = new FovMapper(ui.config.fov);
@@ -185,6 +298,9 @@ async function main(): Promise<void> {
     // Capture current video frame
     camera.drawFrame(offCtx);
     const imageData = offCtx.getImageData(0, 0, camera.width, camera.height);
+    if (ui.config.grayscaleProcessing) {
+      toGrayscaleInPlace(imageData);
+    }
 
     // Update background model every frame (smooth EMA)
     bgModel.update(imageData);

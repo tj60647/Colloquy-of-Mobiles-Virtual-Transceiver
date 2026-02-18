@@ -1,0 +1,9 @@
+{
+  "mode": "sound",
+  "selectedWord": "I_O",
+  "controls": {
+    "invert-toggle": false,
+    "rate-toggle": "0",
+    "freq-slider": "0"
+  }
+}

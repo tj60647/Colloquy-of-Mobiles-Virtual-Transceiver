@@ -9,6 +9,7 @@ import { AUDIO_BANDPASS_DEFAULT_CENTER, AUDIO_BANDPASS_DEFAULT_Q } from '../shar
 export interface AppConfig {
   detectorMode:    'light' | 'audio';
   sampleRateHz:    20 | 40;
+  grayscaleProcessing: boolean;
   threshold:       number;   // detection delta threshold (0–255)
   audioThreshold:  number;   // audio delta threshold (0–255)
   audioBandpassCenter: number; // audio detector bandpass center frequency (Hz)
@@ -33,6 +34,7 @@ export class UI {
   readonly config: AppConfig = {
     detectorMode:    'light',
     sampleRateHz:    40,
+    grayscaleProcessing: true,
     threshold:       30,
     audioThreshold:  20,
     audioBandpassCenter: AUDIO_BANDPASS_DEFAULT_CENTER,
@@ -69,6 +71,10 @@ export class UI {
 
     this.select('sample-rate', v => {
       this.config.sampleRateHz = v === '20' ? 20 : 40;
+    });
+
+    this.toggle('grayscale-processing', v => {
+      this.config.grayscaleProcessing = v;
     });
 
     this.slider('threshold',   0, 255, 1,     this.config.threshold,

@@ -25,6 +25,8 @@ import {
 
 const TONE_FREQS = AUDIO_TONE_FREQS;
 const TOTAL_SEGMENTS = TX_CYCLE_LEN;
+const TRANSMITTER_CONFIG_URL = '/config/transmitter.config.json';
+const TRANSMITTER_CONFIG_STORAGE_KEY = 'vcl.transmitter.config.v1';
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -72,6 +74,81 @@ const likelyTorchDevice = /Android/i.test(navigator.userAgent);
 type AudioContextCtor = new () => AudioContext;
 const AudioContextClass = (window.AudioContext ?? (window as Window & { webkitAudioContext?: AudioContextCtor }).webkitAudioContext) as AudioContextCtor | undefined;
 
+type TransmitterControlMap = Record<string, string | boolean>;
+
+interface TransmitterConfigPayload {
+  controls?: TransmitterControlMap;
+  selectedWord?: DictWord;
+  mode?: TransmitMode;
+}
+
+const TRANSMITTER_CONTROL_IDS = [
+  'invert-toggle',
+  'rate-toggle',
+  'freq-slider',
+] as const;
+
+async function loadTransmitterFileConfig(): Promise<TransmitterConfigPayload> {
+  try {
+    const res = await fetch(TRANSMITTER_CONFIG_URL, { cache: 'no-store' });
+    if (!res.ok) return {};
+    return (await res.json()) as TransmitterConfigPayload;
+  } catch {
+    return {};
+  }
+}
+
+function loadTransmitterLocalConfig(): TransmitterConfigPayload {
+  try {
+    const raw = localStorage.getItem(TRANSMITTER_CONFIG_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as TransmitterConfigPayload;
+  } catch {
+    return {};
+  }
+}
+
+function collectTransmitterControls(): TransmitterControlMap {
+  const out: TransmitterControlMap = {};
+  for (const id of TRANSMITTER_CONTROL_IDS) {
+    const el = document.getElementById(id) as HTMLInputElement | HTMLButtonElement | null;
+    if (!el) continue;
+
+    if (el instanceof HTMLInputElement) {
+      if (el.type === 'checkbox') out[id] = el.checked;
+      else out[id] = el.value;
+    }
+  }
+  return out;
+}
+
+function persistTransmitterConfig(): void {
+  const payload: TransmitterConfigPayload = {
+    controls: collectTransmitterControls(),
+    selectedWord,
+    mode,
+  };
+  localStorage.setItem(TRANSMITTER_CONFIG_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function applyTransmitterControls(controls: TransmitterControlMap): void {
+  if (typeof controls['invert-toggle'] === 'boolean') {
+    invertToggle.checked = Boolean(controls['invert-toggle']);
+    invertToggle.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  if (typeof controls['rate-toggle'] !== 'undefined') {
+    rateToggle.value = String(controls['rate-toggle']);
+    rateToggle.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  if (typeof controls['freq-slider'] !== 'undefined') {
+    freqSlider.value = String(controls['freq-slider']);
+    freqSlider.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+}
+
 // ── Audio state ───────────────────────────────────────────────────────────────
 
 let audioCtx:   AudioContext | null   = null;
@@ -96,6 +173,7 @@ function selectWord(word: DictWord): void {
   wordBtns.forEach((btn, w) => btn.classList.toggle('selected', w === word));
   renderPatternBar(word, -1);
   if (running) restartLoop();
+  persistTransmitterConfig();
 }
 
 // ── Mode switch ───────────────────────────────────────────────────────────────
@@ -109,6 +187,7 @@ function setMode(m: TransmitMode): void {
     indicator.textContent = '🔊';
     startBtn.textContent = 'Start Tone';
     setStatus('Flash mode unavailable here (HTTPS/camera API required). Switched to sound mode.', true);
+    persistTransmitterConfig();
     return;
   }
 
@@ -120,6 +199,7 @@ function setMode(m: TransmitMode): void {
   indicator.textContent    = m === 'flash' ? '💡' : '🔊';
   startBtn.textContent     = m === 'flash' ? 'Start Flashing' : 'Start Tone';
   setStatus('Select a word and tap Start.');
+  persistTransmitterConfig();
 }
 
 modeFlashBtn.addEventListener('click', () => setMode('flash'));
@@ -139,6 +219,7 @@ rateToggle?.addEventListener('input', () => {
   if (running) {
     restartLoop();
   }
+  persistTransmitterConfig();
 });
 
 // ── Frequency selector ────────────────────────────────────────────────────────
@@ -149,6 +230,7 @@ freqSlider.addEventListener('input', () => {
   if (oscillator && audioCtx) {
     oscillator.frequency.setValueAtTime(TONE_FREQS[selectedFreqIdx], audioCtx.currentTime);
   }
+  persistTransmitterConfig();
 });
 
 // ── Pattern bar ───────────────────────────────────────────────────────────────
@@ -421,6 +503,23 @@ if (!canUseMediaDevices) {
   setMode('sound');
   setStatus('Sound mode selected by default. Flash mode is mainly supported on Android Chrome.');
 }
+
+void (async () => {
+  const fileCfg = await loadTransmitterFileConfig();
+  const localCfg = loadTransmitterLocalConfig();
+  const mergedControls = { ...(fileCfg.controls ?? {}), ...(localCfg.controls ?? {}) };
+  applyTransmitterControls(mergedControls);
+
+  const restoredMode = (localCfg.mode ?? fileCfg.mode);
+  if (restoredMode === 'sound' || restoredMode === 'flash') {
+    setMode(restoredMode);
+  }
+
+  const mergedWord = (localCfg.selectedWord ?? fileCfg.selectedWord) as DictWord | undefined;
+  if (mergedWord && DICT_WORDS.includes(mergedWord)) {
+    selectWord(mergedWord);
+  }
+})();
 
 // Stop cleanly on page hide (e.g. phone locks, tab switches)
 document.addEventListener('visibilitychange', () => {
