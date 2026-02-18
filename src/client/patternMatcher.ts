@@ -31,6 +31,16 @@ export class PatternMatcher {
   private count = 0; // samples ingested so far (caps at BUF_LEN)
 
   lastMatch: MatchResult | null = null;
+  lastScores: Record<DictWord, number> = {
+    I_O: 0,
+    I_P: 0,
+    I_OP: 0,
+    II_O: 0,
+    II_P: 0,
+    II_OP: 0,
+    I_R: 0,
+    II_R: 0,
+  };
 
   addSample(detected: boolean): void {
     this.buf[this.head] = detected ? 1 : 0;
@@ -38,7 +48,7 @@ export class PatternMatcher {
     if (this.count < BUF_LEN) this.count++;
 
     if (this.count >= TX_CYCLE_LEN) {
-      this.lastMatch = this.findBest();
+      this.lastMatch = this.scoreCurrentWindow();
     }
   }
 
@@ -46,32 +56,27 @@ export class PatternMatcher {
    * Try every possible alignment of each dictionary word against the
    * most recent (BUF_LEN) samples and return the best match.
    */
-  private findBest(): MatchResult | null {
-    const available = this.count; // how many valid samples we have
-    const maxAlignments = Math.min(TX_CYCLE_LEN, available - TX_CYCLE_LEN + 1);
-
+  private scoreCurrentWindow(): MatchResult | null {
     let bestScore = 0;
     let bestWord: DictWord | null = null;
-    let bestOffset = 0;
+    const windowStart = (this.head - TX_CYCLE_LEN + BUF_LEN * 2) % BUF_LEN;
 
     for (const word of DICT_WORDS) {
-      for (let offset = 0; offset < maxAlignments; offset++) {
-        let matches = 0;
-        for (let i = 0; i < TX_CYCLE_LEN; i++) {
-          const bufIdx = (this.head - available + offset + i + BUF_LEN * 2) % BUF_LEN;
-          const expected = getTransmitBit(word, i) ? 1 : 0;
-          if (this.buf[bufIdx] === expected) matches++;
-        }
-        const score = matches / TX_CYCLE_LEN;
-        if (score > bestScore) {
-          bestScore = score;
-          bestWord  = word;
-          bestOffset = offset;
-        }
+      let matches = 0;
+      for (let i = 0; i < TX_CYCLE_LEN; i++) {
+        const bufIdx = (windowStart + i) % BUF_LEN;
+        const expected = getTransmitBit(word, i) ? 1 : 0;
+        if (this.buf[bufIdx] === expected) matches++;
+      }
+      const score = matches / TX_CYCLE_LEN;
+      this.lastScores[word] = score;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestWord = word;
       }
     }
 
-    void bestOffset; // used only for debugging
     if (bestScore >= THRESHOLD && bestWord !== null) {
       return { word: bestWord, score: bestScore, label: bestWord.replace('_', ' – drive ') };
     }
@@ -83,5 +88,8 @@ export class PatternMatcher {
     this.head      = 0;
     this.count     = 0;
     this.lastMatch = null;
+    for (const word of DICT_WORDS) {
+      this.lastScores[word] = 0;
+    }
   }
 }

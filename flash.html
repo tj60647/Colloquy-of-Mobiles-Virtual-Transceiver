@@ -161,6 +161,13 @@
       color: var(--muted);
     }
 
+    #effective-hz {
+      font-size: 0.72rem;
+      color: var(--accent);
+      opacity: 0.9;
+      letter-spacing: 0.02em;
+    }
+
     /* ── Hidden video (needed for torch API) ─────────── */
     #cam-preview {
       width: 80px;
@@ -355,6 +362,7 @@
   <div id="pattern-bar"></div>
 
   <div id="loop-count"></div>
+  <div id="effective-hz">effective: --.- Hz</div>
 
   <video id="cam-preview" autoplay muted playsinline></video>
 

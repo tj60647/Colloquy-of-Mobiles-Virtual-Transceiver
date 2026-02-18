@@ -36,6 +36,7 @@ const startBtn     = document.getElementById('start-btn') as HTMLButtonElement;
 const wordGrid     = document.getElementById('word-grid')!;
 const patternBar   = document.getElementById('pattern-bar')!;
 const loopCount    = document.getElementById('loop-count')!;
+const effectiveHzEl = document.getElementById('effective-hz')!;
 const camPreview   = document.getElementById('cam-preview') as HTMLVideoElement;
 const modeFlashBtn = document.getElementById('mode-flash') as HTMLButtonElement;
 const modeSoundBtn = document.getElementById('mode-sound') as HTMLButtonElement;
@@ -63,6 +64,8 @@ let loops        = 0;
 let selectedWord: DictWord = 'I_O';
 let invertTransmission = false;
 let txRateHz: 20 | 40 = 40;
+let lastTickWallTs = 0;
+let effectiveHz = 0;
 
 const canUseMediaDevices =
   !!navigator.mediaDevices &&
@@ -370,6 +373,17 @@ function getSegmentMs(): number {
 function tick(): void {
   if (!running) return;
 
+  const now = performance.now();
+  if (lastTickWallTs > 0) {
+    const dt = now - lastTickWallTs;
+    if (dt > 0) {
+      const instHz = 1000 / dt;
+      effectiveHz = effectiveHz === 0 ? instHz : (0.18 * instHz + 0.82 * effectiveHz);
+      effectiveHzEl.textContent = `effective: ${effectiveHz.toFixed(1)} Hz`;
+    }
+  }
+  lastTickWallTs = now;
+
   const segmentMs = getSegmentMs();
   const totalMs   = segmentMs * TOTAL_SEGMENTS;
   const elapsed    = performance.now() - startTime;
@@ -408,6 +422,9 @@ function tick(): void {
 function startLoop(): void {
   startTime = performance.now();
   loops     = 0;
+  lastTickWallTs = 0;
+  effectiveHz = 0;
+  effectiveHzEl.textContent = 'effective: --.- Hz';
   loopCount.textContent = 'Loop 1';
   tick();
 }
@@ -472,6 +489,7 @@ function stop(): void {
   indicator.classList.remove('on');
   renderPatternBar(selectedWord, -1);
   loopCount.textContent = '';
+  effectiveHzEl.textContent = 'effective: --.- Hz';
   startBtn.textContent = mode === 'flash' ? 'Start Flashing' : 'Start Tone';
   startBtn.classList.remove('running');
   setStatus('Stopped.');

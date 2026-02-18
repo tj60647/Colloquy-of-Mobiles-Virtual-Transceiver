@@ -273,6 +273,9 @@ async function main(): Promise<void> {
   let lastReading: LightReading | null = null;
   let audioInitPending = false;
   let lastAudioSpectrum: Uint8Array | null = null;
+  let prevSampleIntervalMs = 1000 / ui.config.sampleRateHz;
+  let lastSampleWallTs = 0;
+  let effectiveSampleHz = 0;
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -313,24 +316,50 @@ async function main(): Promise<void> {
 
     // ── 40 Hz detection tick ────────────────────────────────────────────────
     const sampleIntervalMs = 1000 / ui.config.sampleRateHz;
-    if (timestamp - lastSampleTs >= sampleIntervalMs) {
+
+    if (lastSampleTs === 0) {
       lastSampleTs = timestamp;
+      prevSampleIntervalMs = sampleIntervalMs;
+    }
+
+    if (Math.abs(sampleIntervalMs - prevSampleIntervalMs) > 0.001) {
+      lastSampleTs = timestamp;
+      prevSampleIntervalMs = sampleIntervalMs;
+    }
+
+    let catchUp = 0;
+    const maxCatchUpTicks = 3;
+
+    while (timestamp - lastSampleTs >= sampleIntervalMs && catchUp < maxCatchUpTicks) {
+      lastSampleTs += sampleIntervalMs;
+      catchUp++;
+
+      const sampleTs = lastSampleTs;
+      const wallNow = performance.now();
+      if (lastSampleWallTs > 0) {
+        const dt = wallNow - lastSampleWallTs;
+        if (dt > 0) {
+          const instHz = 1000 / dt;
+          effectiveSampleHz = effectiveSampleHz === 0
+            ? instHz
+            : (0.18 * instHz + 0.82 * effectiveSampleHz);
+        }
+      }
+      lastSampleWallTs = wallNow;
 
       if (ui.config.detectorMode === 'light') {
-        if (!bgModel.isInitialized) return;
+        if (!bgModel.isInitialized) break;
         lastAudioSpectrum = null;
 
-        const reading = det.detect(imageData, bgModel, zone, fov, timestamp);
+        const reading = det.detect(imageData, bgModel, zone, fov, sampleTs);
         lastReading = reading;
 
         rb.push(reading.detected);
-        decoder.addSample(reading.detected, timestamp);
+        decoder.addSample(reading.detected, sampleTs);
         matcher.addSample(reading.detected);
 
-        // Auto-flush Morse decoder on long silences
-        decoder.flush(timestamp);
+        decoder.flush(sampleTs);
 
-        // Update pattern match display
         if (matchEl) {
           const m = matcher.lastMatch;
           if (m) {
@@ -345,24 +374,25 @@ async function main(): Promise<void> {
         wsClient.sendReading(reading);
       } else {
         if (!audioDet.isInitialized) {
-          if (audioInitPending) return;
-          audioInitPending = true;
-          setStatus('Audio mode: requesting microphone access…');
-          void audioDet.initialize().then(() => {
-            audioInitPending = false;
-            setStatus('Audio mode active.');
-          }).catch((err) => {
-            audioInitPending = false;
-            setStatus(`Audio mode error: ${String(err)}`);
-          });
-          return;
+          if (!audioInitPending) {
+            audioInitPending = true;
+            setStatus('Audio mode: requesting microphone access…');
+            void audioDet.initialize().then(() => {
+              audioInitPending = false;
+              setStatus('Audio mode active.');
+            }).catch((err) => {
+              audioInitPending = false;
+              setStatus(`Audio mode error: ${String(err)}`);
+            });
+          }
+          break;
         }
 
         const a = audioDet.detect(ui.config.audioThreshold);
         lastAudioSpectrum = audioDet.getSpectrumSnapshot(128, 3000);
         const { xAngle, yAngle } = fov.pixelToAngle(zone.centerX, zone.centerY, camera.width, camera.height);
         const reading: LightReading = {
-          timestamp,
+          timestamp: sampleTs,
           frameX: Math.round(zone.centerX),
           frameY: Math.round(zone.centerY),
           xAngle: Math.round(xAngle * 10) / 10,
@@ -378,13 +408,11 @@ async function main(): Promise<void> {
         lastReading = reading;
 
         rb.push(reading.detected);
-        decoder.addSample(reading.detected, timestamp);
+        decoder.addSample(reading.detected, sampleTs);
         matcher.addSample(reading.detected);
 
-        // Auto-flush Morse decoder on long silences
-        decoder.flush(timestamp);
+        decoder.flush(sampleTs);
 
-        // Update pattern match display
         if (matchEl) {
           const m = matcher.lastMatch;
           if (m) {
@@ -410,10 +438,12 @@ async function main(): Promise<void> {
       lastReading,
       decoder,
       patternMatch:    matcher.lastMatch,
+      patternScores:   matcher.lastScores,
       detectorMode:    ui.config.detectorMode,
       audioSpectrum:   lastAudioSpectrum,
       audioBandpassCenter: ui.config.audioBandpassCenter,
       audioBandpassQ:  ui.config.audioBandpassQ,
+      effectiveHz:     effectiveSampleHz,
       threshold:       ui.config.detectorMode === 'audio' ? ui.config.audioThreshold : ui.config.threshold,
       wsConnected:     wsClient.connected,
     });

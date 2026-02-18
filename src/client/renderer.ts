@@ -1,5 +1,5 @@
 import type { LightReading } from '../shared/types.js';
-import { DICT_LABELS } from '../shared/dictionary.js';
+import { DICT_LABELS, type DictWord } from '../shared/dictionary.js';
 import type { SensitivityZone } from './sensitivityZone.js';
 import type { BackgroundModel  } from './background.js';
 import type { RingBuffer       } from './ringBuffer.js';
@@ -17,10 +17,12 @@ export interface RenderParams {
   lastReading:     LightReading | null;
   decoder:         PatternDecoder;
   patternMatch:    MatchResult | null;
+  patternScores:   Record<DictWord, number>;
   detectorMode:    'light' | 'audio';
   audioSpectrum:   Uint8Array | null;
   audioBandpassCenter: number;
   audioBandpassQ:  number;
+  effectiveHz:     number;
   threshold:       number;
   wsConnected:     boolean;
 }
@@ -37,6 +39,9 @@ const COLORS = {
   morseText:   '#00ff88',
   morseCode:   '#ffcc00',
 };
+
+const WORDS_I: DictWord[] = ['I_O', 'I_P', 'I_OP', 'I_R'];
+const WORDS_II: DictWord[] = ['II_O', 'II_P', 'II_OP', 'II_R'];
 
 /**
  * Renderer
@@ -167,10 +172,12 @@ export class Renderer {
     const { ctx }  = this;
     const r        = p.lastReading;
     const detected = r?.detected ?? false;
+    const hudTopPad = 12;
+    const hudRowGap = 18;
 
     // ── Info panel (top-left) ────────────────────────────────────────────────
     const panelW = 240;
-    const panelH = 200;
+    const panelH = 196;
     ctx.save();
     ctx.fillStyle = COLORS.hudBg;
     this.roundRect(0, 0, panelW, panelH, 0);
@@ -190,6 +197,7 @@ export class Renderer {
           ['ANGLE ', `${r.xAngle.toFixed(1)}° H  ${r.yAngle.toFixed(1)}° V`],
           ['BRIGHT', `${r.brightness}  (bg ${r.background})`],
           ['DELTA ', `${r.delta > 0 ? '+' : ''}${r.delta}  / thr ${p.threshold}`],
+          ['RATE  ', `${p.effectiveHz > 0 ? p.effectiveHz.toFixed(1) : '--.-'} Hz`],
           ['POS   ', `${fmt1(p.zone.posX)}${unitLabel}  ${fmt1(p.zone.posY)}${unitLabel}`],
           ['VEL   ', `${fmt1(p.zone.velX)} ${velLabel}  ${fmt1(p.zone.velY)} ${velLabel}`],
           ['WS    ', p.wsConnected ? 'connected' : 'offline'],
@@ -198,7 +206,7 @@ export class Renderer {
       : [['STATUS', 'Initialising…']];
 
     lines.forEach(([label, value], i) => {
-      const y = 12 + i * 20;
+      const y = hudTopPad + i * hudRowGap;
       ctx.fillStyle = '#5a7a5a';
       ctx.fillText(label, 10, y);
       ctx.fillStyle =
@@ -210,28 +218,67 @@ export class Renderer {
 
     ctx.restore();
 
-    // ── Morse decode panel (bottom) ──────────────────────────────────────────
-    const botH = 52;
+    // ── Pattern confidence panel (bottom) ───────────────────────────────────
+    const botH = 156;
     ctx.save();
     ctx.fillStyle = COLORS.hudBg;
     this.roundRect(0, height - botH, width, botH, 0);
     ctx.fill();
 
-    const dictWord = p.patternMatch?.word ?? '—';
-    const dictInfo = p.patternMatch
-      ? `${DICT_LABELS[p.patternMatch.word]}  ${Math.round(p.patternMatch.score * 100)}%`
-      : 'No dictionary match';
-
     ctx.textBaseline = 'top';
-    ctx.font      = 'bold 15px "Courier New", monospace';
+    ctx.font      = 'bold 13px "Courier New", monospace';
     ctx.fillStyle = COLORS.morseText;
-    ctx.fillText(`DECODED › ${dictWord}`, 12, height - botH + 8);
+    const titleY = height - botH + 8;
+    ctx.fillText('PATTERN CONFIDENCE', 12, titleY);
 
-    ctx.font      = '12px "Courier New", monospace';
-    ctx.fillStyle = COLORS.morseCode;
-    ctx.fillText(`DETAIL › ${dictInfo}`, 12, height - botH + 30);
+    ctx.font = '11px "Courier New", monospace';
+    const leftX = 12;
+    const rightX = Math.max(250, Math.floor(width / 2));
+    const columnTitleY = titleY + 18;
+    const baseY = columnTitleY + 15;
+    const confidenceRowGap = 19;
+
+    ctx.fillStyle = '#9fb3a0';
+    ctx.fillText('I Patterns', leftX, columnTitleY);
+    ctx.fillText('II Patterns', rightX, columnTitleY);
+
+    this.drawPatternConfidenceColumn(ctx, p, WORDS_I, leftX, baseY, confidenceRowGap);
+    this.drawPatternConfidenceColumn(ctx, p, WORDS_II, rightX, baseY, confidenceRowGap);
 
     ctx.restore();
+  }
+
+  private drawPatternConfidenceColumn(
+    ctx: CanvasRenderingContext2D,
+    p: RenderParams,
+    words: DictWord[],
+    x: number,
+    baseY: number,
+    rowGap: number,
+  ): void {
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const score = p.patternScores[word] ?? 0;
+      const pct = Math.round(score * 100);
+      const y = baseY + i * rowGap;
+
+      ctx.fillStyle = p.patternMatch?.word === word ? COLORS.hudAccent : '#9fb3a0';
+      ctx.fillText(word, x, y);
+
+      ctx.fillStyle = this.confidenceColor(score);
+      ctx.fillText(`${pct.toString().padStart(3, ' ')}%`, x + 44, y);
+
+      ctx.fillStyle = COLORS.hudText;
+      ctx.fillText(DICT_LABELS[word], x + 84, y);
+    }
+  }
+
+  private confidenceColor(score: number): string {
+    const s = Math.max(0, Math.min(1, score));
+    const hue = 8 + s * 132;
+    const sat = 88;
+    const light = 58;
+    return `hsl(${hue}, ${sat}%, ${light}%)`;
   }
 
   private drawAudioSpectrogram(p: RenderParams, width: number): void {
