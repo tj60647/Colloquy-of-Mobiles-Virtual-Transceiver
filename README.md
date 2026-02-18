@@ -211,10 +211,20 @@ Server listens on `PORT` (default `3001`) and serves built client from `dist/cli
 
 ## Browser/device compatibility
 
-- **Sensor app (`/`)**: works in modern desktop/mobile browsers with camera access.
-- **Advanced camera controls**: best in Chrome/Edge; limited in Firefox/Safari.
-- **Torch mode (`/flash`)**: generally Chrome on Android only.
-- **Sound mode (`/flash`)**: cross-browser fallback.
+| Device / Browser | Sensor (`/`) | Transmitter Flash (`/flash`) | Transmitter Sound (`/flash`) | Notes |
+|---|---|---|---|---|
+| Desktop Chrome / Edge | ✅ Full | ⚠️ Usually unavailable | ✅ | Best support for camera capabilities and tuning controls |
+| Desktop Firefox | ✅ Core | ⚠️ Usually unavailable | ✅ | Limited `getCapabilities()` camera tuning |
+| Desktop Safari | ✅ Core | ⚠️ Usually unavailable | ✅ | Camera tuning surface is limited |
+| Android Chrome | ✅ Full/Core | ✅ Best target | ✅ | Preferred phone setup for torch transmitter |
+| iOS Safari | ✅ Core | ❌ Not supported | ✅ | Torch API generally unavailable on iOS Safari |
+
+### Runtime fallback behavior
+
+- Sensor page now checks camera API + secure context on startup and shows a compatibility banner.
+- Flash transmitter auto-falls back to sound mode when torch/camera APIs are unavailable.
+- Flash mode button is disabled automatically in environments without secure camera APIs.
+- Hidden-tab behavior is handled to avoid stale timing while backgrounded on phones.
 
 ---
 
@@ -224,6 +234,22 @@ Server listens on `PORT` (default `3001`) and serves built client from `dist/cli
 - **WS disconnected:** verify server is running and `/ws` proxy path is correct.
 - **Torch unavailable:** switch to sound mode or use Android Chrome with rear camera.
 - **Decode noisy:** increase Morse unit duration and/or reduce detection threshold oscillation.
+
+### Quick validation checklist (laptop + phone)
+
+- Open sensor page on laptop: camera starts, controls render, compatibility banner shows `ok`.
+- Open sensor page on phone: UI remains usable in portrait and landscape.
+- Background and resume tab/app: status changes to paused/resumed and detection recovers.
+- Open transmitter on phone: flash mode works on Android Chrome; iOS auto-switches to sound.
+- Disconnect/reconnect network: sensor reconnects WS automatically and resumes sending.
+
+### Mixed-device runbook
+
+1. Start app with `npm run dev`.
+2. On laptop, open sensor page: `http://<host>:5173/`.
+3. On phone, open transmitter page: `http://<host>:5173/flash`.
+4. If flash mode is unsupported, use sound mode and point phone speaker toward sensor mic/capture target.
+5. For remote hosting, use HTTPS/WSS and ensure `/ws` upgrades are enabled at the proxy.
 
 ---
 

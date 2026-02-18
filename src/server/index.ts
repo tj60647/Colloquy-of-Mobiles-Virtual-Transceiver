@@ -71,6 +71,7 @@ interface ClientState {
   ws: WebSocket;
   role: 'sensor' | 'subscriber' | 'unknown';
   connectedAt: number;
+  alive: boolean;
 }
 
 const clients = new Set<ClientState>();
@@ -84,9 +85,13 @@ function broadcast(msg: string, exclude?: WebSocket): void {
 }
 
 wss.on('connection', (ws) => {
-  const state: ClientState = { ws, role: 'unknown', connectedAt: Date.now() };
+  const state: ClientState = { ws, role: 'unknown', connectedAt: Date.now(), alive: true };
   clients.add(state);
   console.log(`[ws] client connected  total=${clients.size}`);
+
+  ws.on('pong', () => {
+    state.alive = true;
+  });
 
   ws.on('message', (raw) => {
     let msg: WsMessage;
@@ -132,6 +137,25 @@ wss.on('connection', (ws) => {
   });
 });
 
+const HEARTBEAT_MS = 30_000;
+setInterval(() => {
+  for (const state of clients) {
+    if (state.ws.readyState !== WebSocket.OPEN) continue;
+
+    if (!state.alive) {
+      state.ws.terminate();
+      continue;
+    }
+
+    state.alive = false;
+    try {
+      state.ws.ping();
+    } catch {
+      state.ws.terminate();
+    }
+  }
+}, HEARTBEAT_MS);
+
 // Handle WebSocket upgrade only at /ws
 httpServer.on('upgrade', (req, socket, head) => {
   if (req.url === '/ws') {
@@ -141,6 +165,15 @@ httpServer.on('upgrade', (req, socket, head) => {
   } else {
     socket.destroy();
   }
+});
+
+httpServer.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[http] Port ${PORT} is already in use. Stop the old process or run with PORT=<free-port>.`);
+    process.exit(1);
+  }
+  console.error('[http] server error:', err.message);
+  process.exit(1);
 });
 
 httpServer.listen(PORT, () => {

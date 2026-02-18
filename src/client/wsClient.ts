@@ -11,6 +11,7 @@ export class WsClient {
   private ws: WebSocket | null = null;
   private retryDelay = 1000; // ms, doubles on each failure up to 16 s
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private hasNetworkListeners = false;
 
   connected = false;
   /** Called whenever a message arrives from the server (e.g. pong) */
@@ -19,10 +20,15 @@ export class WsClient {
   constructor(private readonly url: string) {}
 
   connect(): void {
+    this.ensureNetworkListeners();
     this.tryConnect();
   }
 
   private tryConnect(): void {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
     try {
       this.ws = new WebSocket(this.url);
 
@@ -54,11 +60,24 @@ export class WsClient {
 
   private scheduleReconnect(): void {
     if (this.retryTimer !== null) return;
+    const jitterMs = Math.floor(Math.random() * 300);
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       this.retryDelay = Math.min(this.retryDelay * 2, 16_000);
       this.tryConnect();
-    }, this.retryDelay);
+    }, this.retryDelay + jitterMs);
+  }
+
+  private ensureNetworkListeners(): void {
+    if (this.hasNetworkListeners) return;
+    this.hasNetworkListeners = true;
+
+    window.addEventListener('online', () => {
+      if (!this.connected) {
+        this.retryDelay = 1000;
+        this.tryConnect();
+      }
+    });
   }
 
   /** Send a detection reading to the server */

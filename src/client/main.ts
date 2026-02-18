@@ -28,6 +28,22 @@ import type { LightReading } from '../shared/types.js';
 
 const SAMPLE_INTERVAL_MS = 1000 / 40; // 25 ms → 40 Hz
 
+function isLikelyMobile(): boolean {
+  return window.matchMedia('(max-width: 900px)').matches;
+}
+
+function canUseCamera(): { ok: boolean; reason?: string } {
+  if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    return { ok: false, reason: 'Camera access requires HTTPS (or localhost).' };
+  }
+
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    return { ok: false, reason: 'This browser does not support camera capture APIs.' };
+  }
+
+  return { ok: true };
+}
+
 async function main(): Promise<void> {
   // ── DOM ───────────────────────────────────────────────────────────────────
   const canvas = document.getElementById('main-canvas') as HTMLCanvasElement;
@@ -35,9 +51,31 @@ async function main(): Promise<void> {
   if (!ctx) throw new Error('Could not get 2D context');
 
   const statusEl = document.getElementById('status-msg');
+  const compatEl = document.getElementById('compat-msg');
   function setStatus(msg: string): void {
     if (statusEl) statusEl.textContent = msg;
   }
+
+  function setCompat(msg: string, kind: 'ok' | 'warn' = 'warn'): void {
+    if (!compatEl) return;
+    compatEl.textContent = msg;
+    compatEl.classList.remove('ok', 'warn');
+    compatEl.classList.add(kind);
+  }
+
+  const capability = canUseCamera();
+  if (!capability.ok) {
+    setStatus(capability.reason ?? 'Camera unavailable');
+    setCompat(capability.reason ?? 'Unsupported environment', 'warn');
+    return;
+  }
+
+  setCompat(
+    isLikelyMobile()
+      ? 'Mobile mode active: use portrait/landscape and keep screen awake while sampling.'
+      : 'Desktop mode active: full controls available.',
+    'ok',
+  );
 
   setStatus('Requesting camera access…');
 
@@ -97,6 +135,14 @@ async function main(): Promise<void> {
   const wsClient = new WsClient(wsUrl);
   wsClient.connect();
 
+  function shutdown(): void {
+    wsClient.disconnect();
+    camera.stop();
+  }
+
+  window.addEventListener('beforeunload', shutdown);
+  window.addEventListener('pagehide', shutdown);
+
   // ── UI callbacks ──────────────────────────────────────────────────────────
   ui.onResetBackground = () => bgModel.reset();
   ui.onResetDecoder    = () => { decoder.reset(); matcher.reset(); };
@@ -105,8 +151,19 @@ async function main(): Promise<void> {
   let lastSampleTs = 0;
   let lastReading: LightReading | null = null;
 
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      setStatus('Paused while tab is hidden.');
+    } else {
+      lastSampleTs = performance.now();
+      setStatus('Resumed.');
+    }
+  });
+
   function loop(timestamp: number): void {
     requestAnimationFrame(loop);
+
+    if (document.hidden) return;
 
     // Sync config from UI every frame (cheap reads)
     bgModel.alpha        = ui.config.backgroundAlpha;

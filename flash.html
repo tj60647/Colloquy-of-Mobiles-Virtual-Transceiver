@@ -104,7 +104,9 @@
       min-width: 0;
     }
     .seg.on    { background: var(--on); }
+    .seg.listening { background: #203040; }
     .seg.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .seg.listening.active { outline-color: #7dd3fc; }
 
     /* ── Controls ────────────────────────────────────── */
     #start-btn {
@@ -196,6 +198,48 @@
       color: #000;
     }
 
+    .invert-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      max-width: 380px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      font-size: 0.86rem;
+      color: var(--text);
+    }
+    .settings-row {
+      display: flex;
+      align-items: stretch;
+      gap: 10px;
+      width: 100%;
+      max-width: 380px;
+    }
+    .settings-row .invert-row {
+      width: auto;
+      max-width: none;
+      flex: 1;
+    }
+    .invert-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .rate-select {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
     /* ── Frequency selector ──────────────────────────── */
     #freq-section {
       width: 100%;
@@ -240,6 +284,21 @@
   <div class="mode-switch">
     <button id="mode-flash" class="mode-btn active">💡 Flash</button>
     <button id="mode-sound" class="mode-btn">🔊 Sound</button>
+  </div>
+
+  <div class="settings-row">
+    <label class="invert-row" for="invert-toggle">
+      <span>Invert (ON ↔ OFF)</span>
+      <input type="checkbox" id="invert-toggle">
+    </label>
+
+    <label class="invert-row" for="rate-toggle">
+      <span>Rate</span>
+      <select id="rate-toggle" class="rate-select">
+        <option value="40" selected>40 Hz</option>
+        <option value="20">20 Hz</option>
+      </select>
+    </label>
   </div>
 
   <div id="torch-indicator">💡</div>

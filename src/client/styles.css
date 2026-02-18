@@ -75,6 +75,26 @@ html, body {
   padding-bottom: 16px;
 }
 
+.compat-msg {
+  margin: 10px 16px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.compat-msg.ok {
+  background: #0a1a12;
+  border: 1px solid #1a3a24;
+  color: var(--accent);
+}
+
+.compat-msg.warn {
+  background: #26190a;
+  border: 1px solid #4a2f10;
+  color: var(--accent2);
+}
+
 #controls::-webkit-scrollbar         { width: 4px; }
 #controls::-webkit-scrollbar-track   { background: var(--surface); }
 #controls::-webkit-scrollbar-thumb   { background: var(--border); border-radius: 2px; }
@@ -306,4 +326,64 @@ button.danger:hover {
 #pattern-match .match-score {
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  html, body {
+    overflow: auto;
+  }
+
+  #app {
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  #canvas-wrap {
+    flex: 0 0 46dvh;
+    min-height: 320px;
+  }
+
+  #status-msg {
+    max-width: calc(100% - 16px);
+    white-space: normal;
+    text-align: center;
+  }
+
+  #controls {
+    width: 100%;
+    min-width: 0;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding-bottom: 24px;
+  }
+
+  .panel-title {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
+  }
+
+  .section {
+    padding: 12px 12px 6px;
+  }
+
+  .ctrl-row {
+    gap: 6px;
+  }
+
+  .ctrl-row label {
+    width: 72px;
+    font-size: 10px;
+  }
+
+  button {
+    min-height: 32px;
+  }
+
+  .ws-note,
+  .compat-msg {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
 }

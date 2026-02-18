@@ -22,6 +22,8 @@ import {
 // ── Tone frequencies ──────────────────────────────────────────────────────────
 
 const TONE_FREQS = [1760, 1976, 2093, 2349, 2637] as const;
+const LISTEN_SEGMENTS = PATTERN_LEN;
+const TOTAL_SEGMENTS = PATTERN_LEN + LISTEN_SEGMENTS;
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -34,6 +36,8 @@ const loopCount    = document.getElementById('loop-count')!;
 const camPreview   = document.getElementById('cam-preview') as HTMLVideoElement;
 const modeFlashBtn = document.getElementById('mode-flash') as HTMLButtonElement;
 const modeSoundBtn = document.getElementById('mode-sound') as HTMLButtonElement;
+const invertToggle = document.getElementById('invert-toggle') as HTMLInputElement;
+const rateToggle = document.getElementById('rate-toggle') as HTMLSelectElement;
 const freqSection  = document.getElementById('freq-section')!;
 const freqSlider   = document.getElementById('freq-slider') as HTMLInputElement;
 const freqDisplay  = document.getElementById('freq-display')!;
@@ -47,11 +51,24 @@ let selectedFreqIdx            = 0;
 
 let torchTrack:  MediaStreamTrack | null = null;
 let torchStream: MediaStream | null      = null;
+let flashSimulated = false;
 let running      = false;
 let timeoutId:   ReturnType<typeof setTimeout> | null = null;
 let startTime    = 0;
 let loops        = 0;
 let selectedWord: DictWord = 'I_O';
+let invertTransmission = false;
+let txRateHz: 20 | 40 = 40;
+
+const canUseMediaDevices =
+  !!navigator.mediaDevices &&
+  typeof navigator.mediaDevices.getUserMedia === 'function' &&
+  (window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+
+const likelyTorchDevice = /Android/i.test(navigator.userAgent);
+
+type AudioContextCtor = new () => AudioContext;
+const AudioContextClass = (window.AudioContext ?? (window as Window & { webkitAudioContext?: AudioContextCtor }).webkitAudioContext) as AudioContextCtor | undefined;
 
 // ── Audio state ───────────────────────────────────────────────────────────────
 
@@ -79,11 +96,20 @@ function selectWord(word: DictWord): void {
   if (running) restartLoop();
 }
 
-selectWord('I_O');
-
 // ── Mode switch ───────────────────────────────────────────────────────────────
 
 function setMode(m: TransmitMode): void {
+  if (m === 'flash' && !canUseMediaDevices) {
+    mode = 'sound';
+    modeFlashBtn.classList.remove('active');
+    modeSoundBtn.classList.add('active');
+    freqSection.style.display = 'flex';
+    indicator.textContent = '🔊';
+    startBtn.textContent = 'Start Tone';
+    setStatus('Flash mode unavailable here (HTTPS/camera API required). Switched to sound mode.', true);
+    return;
+  }
+
   if (running) stop();
   mode = m;
   modeFlashBtn.classList.toggle('active', m === 'flash');
@@ -96,6 +122,21 @@ function setMode(m: TransmitMode): void {
 
 modeFlashBtn.addEventListener('click', () => setMode('flash'));
 modeSoundBtn.addEventListener('click', () => setMode('sound'));
+invertToggle?.addEventListener('change', () => {
+  invertTransmission = invertToggle.checked;
+  if (running) {
+    restartLoop();
+  } else {
+    renderPatternBar(selectedWord, -1);
+  }
+});
+
+rateToggle?.addEventListener('change', () => {
+  txRateHz = rateToggle.value === '20' ? 20 : 40;
+  if (running) {
+    restartLoop();
+  }
+});
 
 // ── Frequency selector ────────────────────────────────────────────────────────
 
@@ -112,7 +153,7 @@ freqSlider.addEventListener('input', () => {
 const segEls: HTMLDivElement[] = [];
 
 // Build once
-for (let i = 0; i < PATTERN_LEN; i++) {
+for (let i = 0; i < TOTAL_SEGMENTS; i++) {
   const d = document.createElement('div');
   d.className = 'seg';
   patternBar.appendChild(d);
@@ -121,13 +162,23 @@ for (let i = 0; i < PATTERN_LEN; i++) {
 
 function renderPatternBar(word: DictWord, activeSeg: number): void {
   const pattern = DICTIONARY[word];
-  for (let i = 0; i < PATTERN_LEN; i++) {
+  for (let i = 0; i < TOTAL_SEGMENTS; i++) {
+    const isListening = i >= PATTERN_LEN;
+    const isOn = !isListening && getTxOn(pattern, i);
     segEls[i].className =
       'seg' +
-      (pattern[i] === 1 ? ' on' : '') +
+      (isOn ? ' on' : '') +
+      (isListening ? ' listening' : '') +
       (i === activeSeg ? ' active' : '');
   }
 }
+
+function getTxOn(pattern: readonly number[], idx: number): boolean {
+  const bitOn = pattern[idx] === 1;
+  return invertTransmission ? !bitOn : bitOn;
+}
+
+selectWord('I_O');
 
 // ── Torch helpers ─────────────────────────────────────────────────────────────
 
@@ -210,7 +261,11 @@ function releaseTorch(): void {
 // ── Audio helpers ─────────────────────────────────────────────────────────────
 
 function startAudio(): void {
-  audioCtx  = new AudioContext();
+  if (!AudioContextClass) {
+    throw new Error('Web Audio is not supported in this browser.');
+  }
+
+  audioCtx  = new AudioContextClass();
   // Browsers often start the context suspended due to autoplay policy;
   // resume() unlocks it — must be called synchronously in the user-gesture handler.
   void audioCtx.resume();
@@ -241,16 +296,22 @@ function stopAudio(): void {
 
 // ── Precision timing loop ─────────────────────────────────────────────────────
 
-const TOTAL_MS = SEGMENT_MS * PATTERN_LEN; // 1000 ms per loop
+function getSegmentMs(): number {
+  return txRateHz === 40 ? SEGMENT_MS : SEGMENT_MS * 2;
+}
 
 function tick(): void {
   if (!running) return;
 
+  const segmentMs = getSegmentMs();
+  const totalMs   = segmentMs * TOTAL_SEGMENTS;
   const elapsed    = performance.now() - startTime;
-  const posInLoop  = elapsed % TOTAL_MS;
-  const segIdx     = Math.floor(posInLoop / SEGMENT_MS);
+  const posInLoop  = elapsed % totalMs;
+  const segIdx     = Math.floor(posInLoop / segmentMs);
   const pattern    = DICTIONARY[selectedWord];
-  const torchOn    = pattern[segIdx] === 1;
+  const inListenWindow = segIdx >= PATTERN_LEN;
+  const patternIdx = segIdx < PATTERN_LEN ? segIdx : segIdx - PATTERN_LEN;
+  const torchOn    = !inListenWindow && getTxOn(pattern, patternIdx);
 
   // Update output
   if (mode === 'flash') {
@@ -265,14 +326,16 @@ function tick(): void {
   renderPatternBar(selectedWord, segIdx);
 
   // Update loop counter
-  const newLoops = Math.floor(elapsed / TOTAL_MS);
+  const newLoops = Math.floor(elapsed / totalMs);
   if (newLoops !== loops) {
     loops = newLoops;
     loopCount.textContent = `Loop ${loops + 1}`;
   }
 
+  loopCount.textContent = `Loop ${loops + 1} · ${inListenWindow ? 'LISTEN' : 'TX'} · ${txRateHz}Hz`;
+
   // Schedule next tick at the start of the next segment
-  const nextBoundaryMs = (segIdx + 1) * SEGMENT_MS;
+  const nextBoundaryMs = (segIdx + 1) * segmentMs;
   const timeUntilNext  = nextBoundaryMs - posInLoop;
   timeoutId = setTimeout(tick, Math.max(1, timeUntilNext));
 }
@@ -303,21 +366,31 @@ async function start(): Promise<void> {
   if (mode === 'flash') {
     setStatus('Requesting camera access…');
     startBtn.disabled = true;
+    flashSimulated = false;
 
     const ok = await acquireTorch();
     if (!ok) {
-      startBtn.disabled = false;
-      return;
+      flashSimulated = true;
+      setStatus('Torch unavailable on this device. Running simulated flash mode (icon only).', true);
     }
   } else {
-    startAudio();
+    try {
+      startAudio();
+    } catch (err) {
+      setStatus(String(err), true);
+      return;
+    }
   }
 
   running = true;
   startBtn.disabled = false;
   startBtn.textContent = 'Stop';
   startBtn.classList.add('running');
-  setStatus(`Broadcasting: ${selectedWord}`);
+  if (mode === 'flash' && flashSimulated) {
+    setStatus(`Simulated flash broadcasting: ${selectedWord}`);
+  } else {
+    setStatus(`Broadcasting: ${selectedWord}`);
+  }
   startLoop();
 }
 
@@ -346,7 +419,27 @@ function setStatus(msg: string, isError = false): void {
   statusEl.className   = isError ? 'err' : '';
 }
 
+if (!canUseMediaDevices) {
+  modeFlashBtn.disabled = true;
+  setMode('sound');
+} else if (!likelyTorchDevice) {
+  setMode('sound');
+  setStatus('Sound mode selected by default. Flash mode is mainly supported on Android Chrome.');
+}
+
 // Stop cleanly on page hide (e.g. phone locks, tab switches)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && running) stop();
+});
+
+window.addEventListener('beforeunload', () => {
+  if (running) stop();
+  releaseTorch();
+  stopAudio();
+});
+
+window.addEventListener('pagehide', () => {
+  if (running) stop();
+  releaseTorch();
+  stopAudio();
 });
