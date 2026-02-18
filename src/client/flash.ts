@@ -87,23 +87,40 @@ function renderPatternBar(word: DictWord, activeSeg: number): void {
 
 async function acquireTorch(): Promise<boolean> {
   try {
+    setStatus('[1/4] Requesting camera permission…');
     torchStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' },
       audio: false,
     });
+
+    setStatus('[2/4] Permission granted – reading tracks…');
     camPreview.srcObject = torchStream;
     camPreview.classList.add('visible');
     const tracks = torchStream.getVideoTracks();
-    if (tracks.length === 0) throw new Error('No video track');
+    console.log('[flash] track count:', tracks.length);
+    if (tracks.length === 0) throw new Error('No video track returned');
     torchTrack = tracks[0];
+    console.log('[flash] track label:', torchTrack.label);
+    console.log('[flash] track settings:', JSON.stringify(torchTrack.getSettings?.() ?? {}));
 
-    // Verify the device actually supports torch before proceeding.
-    // getCapabilities() is not available on iOS Safari, so guard the call.
-    const caps = typeof torchTrack.getCapabilities === 'function'
-      ? (torchTrack.getCapabilities() as { torch?: boolean })
-      : {};
+    setStatus(`[3/4] Track: "${torchTrack.label || 'unnamed'}" – checking torch capability…`);
+
+    // getCapabilities() is Chrome-only; iOS Safari doesn't have it.
+    let caps: { torch?: boolean } = {};
+    if (typeof torchTrack.getCapabilities === 'function') {
+      caps = torchTrack.getCapabilities() as { torch?: boolean };
+      console.log('[flash] capabilities:', JSON.stringify(caps));
+      setStatus(`[4/4] Capabilities: ${JSON.stringify(caps)}`);
+    } else {
+      console.log('[flash] getCapabilities() unavailable (likely iOS Safari)');
+      setStatus('[4/4] getCapabilities() not available on this browser (iOS Safari?)');
+    }
+
     if (!caps.torch) {
-      setStatus('Torch not supported on this device. Use Chrome on Android.', true);
+      const detail = typeof torchTrack.getCapabilities === 'function'
+        ? `caps=${JSON.stringify(caps)}`
+        : 'getCapabilities() missing';
+      setStatus(`Torch not supported (${detail}). Use Chrome on Android.`, true);
       torchStream.getTracks().forEach(t => t.stop());
       torchStream = null;
       torchTrack  = null;
@@ -114,6 +131,7 @@ async function acquireTorch(): Promise<boolean> {
 
     return true;
   } catch (e) {
+    console.error('[flash] acquireTorch error:', e);
     setStatus(`Camera error: ${String(e)}`, true);
     return false;
   }
