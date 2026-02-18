@@ -126,14 +126,20 @@
 
     /* ── Status ──────────────────────────────────────── */
     #status {
-      font-size: 0.82rem;
-      color: var(--muted);
+      font-size: 0.88rem;
+      color: var(--text);
       text-align: center;
       max-width: 340px;
       line-height: 1.5;
       min-height: 2.5em;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      width: 100%;
+      word-break: break-word;
     }
-    #status.err { color: var(--danger); }
+    #status.err { color: var(--danger); border-color: var(--danger); }
 
     /* ── Loop counter ────────────────────────────────── */
     #loop-count {
