@@ -24,6 +24,32 @@ html, body {
   overflow: hidden;
 }
 
+.app-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 10px 16px 0;
+}
+
+.app-tab {
+  flex: 1;
+  text-align: center;
+  text-decoration: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-tab.active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
 /* ── App shell ────────────────────────────────────────────────────────────── */
 #app {
   display: flex;

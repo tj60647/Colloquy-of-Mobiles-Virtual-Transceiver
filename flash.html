@@ -37,7 +37,7 @@
       color: var(--accent);
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      margin-top: 8px;
+      margin: 0;
     }
 
     /* ── Torch indicator ─────────────────────────────── */
@@ -189,6 +189,31 @@
 
     a { color: var(--accent); text-decoration: none; }
 
+    .header-row {
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .back-btn {
+      display: inline-block;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .back-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
     /* ── Mode switch ─────────────────────────────────── */
     .mode-switch {
       display: flex;
@@ -216,6 +241,7 @@
       background: var(--accent);
       color: #000;
     }
+
 
     .invert-row {
       display: flex;
@@ -317,7 +343,10 @@
   </style>
 </head>
 <body>
-  <h1>Transmitter <span id="build-ver" style="font-size:0.6em;opacity:0.5;font-weight:400;letter-spacing:0">v6</span></h1>
+  <div class="header-row">
+    <h1>Transmitter <span id="build-ver" style="font-size:0.6em;opacity:0.5;font-weight:400;letter-spacing:0">v6</span></h1>
+    <a class="back-btn" href="/">← Sensor</a>
+  </div>
 
   <div class="mode-switch">
     <button id="mode-flash" class="mode-btn active">💡 Flash</button>
@@ -370,8 +399,6 @@
     Flash mode uses the rear camera torch — Chrome/Android only.<br>
     Sound mode plays a sine wave through the speaker (all browsers).
   </p>
-  <p class="note"><a href="/">← Sensor</a></p>
-
   <script type="module" src="/src/client/flash.ts"></script>
 </body>
 </html>
