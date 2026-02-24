@@ -30,6 +30,7 @@ import type { LightReading } from '../shared/types.js';
 
 const SENSOR_CONFIG_URL = '/config/sensor.config.json';
 const SENSOR_CONFIG_STORAGE_KEY = 'vcl.sensor.config.v1';
+const CAMERA_DEVICE_STORAGE_KEY = 'vcl.camera.deviceId.v1';
 
 const SENSOR_CONTROL_IDS = [
   'detector-mode',
@@ -132,6 +133,18 @@ function installSensorConfigPersistence(): void {
       : 'input';
     el.addEventListener(evt, persist);
   }
+}
+
+function loadPreferredCameraDeviceId(): string {
+  return localStorage.getItem(CAMERA_DEVICE_STORAGE_KEY) ?? '';
+}
+
+function savePreferredCameraDeviceId(deviceId: string): void {
+  localStorage.setItem(CAMERA_DEVICE_STORAGE_KEY, deviceId);
+}
+
+function clearPreferredCameraDeviceId(): void {
+  localStorage.removeItem(CAMERA_DEVICE_STORAGE_KEY);
 }
 
 function isLikelyMobile(): boolean {
@@ -244,6 +257,7 @@ async function main(): Promise<void> {
     const devices = await camera.listVideoInputs();
     const previous = camDeviceEl.value;
     const selected = camera.selectedDeviceId;
+    const preferred = loadPreferredCameraDeviceId();
 
     camDeviceEl.innerHTML = '';
 
@@ -253,6 +267,7 @@ async function main(): Promise<void> {
       option.textContent = 'Default camera';
       camDeviceEl.appendChild(option);
       camDeviceEl.disabled = true;
+      clearPreferredCameraDeviceId();
       return;
     }
 
@@ -267,18 +282,22 @@ async function main(): Promise<void> {
       camDeviceEl.value = selected;
     } else if (previous && devices.some((d) => d.deviceId === previous)) {
       camDeviceEl.value = previous;
+    } else if (preferred && devices.some((d) => d.deviceId === preferred)) {
+      camDeviceEl.value = preferred;
     } else {
       camDeviceEl.value = devices[0].deviceId;
+    }
+
+    if (preferred && !devices.some((d) => d.deviceId === preferred)) {
+      clearPreferredCameraDeviceId();
     }
 
     camDeviceEl.disabled = devices.length <= 1;
   }
 
-  camDeviceEl?.addEventListener('change', async () => {
-    const nextDeviceId = camDeviceEl.value;
-    if (!nextDeviceId || nextDeviceId === camera.selectedDeviceId) return;
+  async function switchCamera(nextDeviceId: string): Promise<boolean> {
+    if (!nextDeviceId || nextDeviceId === camera.selectedDeviceId) return false;
 
-    camDeviceEl.disabled = true;
     setStatus('Switching camera…');
 
     try {
@@ -289,10 +308,21 @@ async function main(): Promise<void> {
       offCanvas.height = camera.height;
       zone.updateDimensions(camera.width, camera.height);
       camControls?.build();
+      savePreferredCameraDeviceId(nextDeviceId);
       setStatus('Camera ready.');
+      return true;
     } catch (err) {
       setStatus(`Camera error: ${String(err)}`);
+      return false;
     }
+  }
+
+  camDeviceEl?.addEventListener('change', async () => {
+    const nextDeviceId = camDeviceEl.value;
+    if (!nextDeviceId) return;
+
+    camDeviceEl.disabled = true;
+    await switchCamera(nextDeviceId);
 
     await refreshCameraSelector();
   });
@@ -302,6 +332,16 @@ async function main(): Promise<void> {
   });
 
   await refreshCameraSelector();
+
+  if (camDeviceEl) {
+    const preferred = loadPreferredCameraDeviceId();
+    const exists = preferred && Array.from(camDeviceEl.options).some((o) => o.value === preferred);
+    if (exists && preferred !== camera.selectedDeviceId) {
+      camDeviceEl.disabled = true;
+      await switchCamera(preferred);
+      await refreshCameraSelector();
+    }
+  }
 
   const matchEl = document.getElementById('pattern-match');
   const matchWordEl  = matchEl?.querySelector('.match-word')  as HTMLElement | null;
