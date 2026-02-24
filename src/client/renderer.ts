@@ -6,7 +6,7 @@ import type { RingBuffer       } from './ringBuffer.js';
 import type { PatternDecoder   } from './patternDecoder.js';
 import type { MatchResult } from './patternMatcher.js';
 
-export type ViewMode = 'live' | 'background';
+export type ViewMode = 'live' | 'background' | 'difference';
 
 export interface RenderParams {
   imageData:       ImageData;
@@ -59,6 +59,7 @@ export class Renderer {
   private readonly specBins = 64;
   private readonly specMaxHz = 3000;
   private specHistory: Uint8Array[] = [];
+  private differenceImage: ImageData | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -76,6 +77,8 @@ export class Renderer {
       this.drawAudioBackground(width, height);
     } else if (p.viewMode === 'live') {
       ctx.putImageData(p.imageData, 0, 0);
+    } else if (p.viewMode === 'difference') {
+      this.drawDifferenceView(p);
     } else if (p.backgroundModel.isInitialized) {
       ctx.putImageData(p.backgroundModel.getBackgroundImageData(ctx), 0, 0);
     } else {
@@ -167,6 +170,46 @@ export class Renderer {
     });
 
     ctx.restore();
+  }
+
+  private drawDifferenceView(p: RenderParams): void {
+    const { ctx } = this;
+    const src = p.imageData;
+
+    if (!p.backgroundModel.isInitialized) {
+      ctx.putImageData(src, 0, 0);
+      return;
+    }
+
+    const bg = p.backgroundModel.getBackgroundImageData(ctx);
+    if (bg.width !== src.width || bg.height !== src.height) {
+      ctx.putImageData(src, 0, 0);
+      return;
+    }
+
+    if (!this.differenceImage ||
+        this.differenceImage.width !== src.width ||
+        this.differenceImage.height !== src.height) {
+      this.differenceImage = ctx.createImageData(src.width, src.height);
+    }
+
+    const out = this.differenceImage.data;
+    const srcData = src.data;
+    const bgData = bg.data;
+
+    for (let i = 0; i < srcData.length; i += 4) {
+      const srcLum = 0.299 * srcData[i] + 0.587 * srcData[i + 1] + 0.114 * srcData[i + 2];
+      const bgLum = 0.299 * bgData[i] + 0.587 * bgData[i + 1] + 0.114 * bgData[i + 2];
+      const diff = srcLum - bgLum;
+      const on = diff > p.threshold;
+      const v = on ? 255 : 0;
+      out[i] = v;
+      out[i + 1] = v;
+      out[i + 2] = v;
+      out[i + 3] = 255;
+    }
+
+    ctx.putImageData(this.differenceImage, 0, 0);
   }
 
   private drawHUD(p: RenderParams, width: number, height: number): void {

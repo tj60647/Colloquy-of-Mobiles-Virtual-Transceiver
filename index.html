@@ -27,13 +27,13 @@
     <!-- View mode -->
     <div class="section">
       <div class="section-label">View</div>
-      <div class="toggle-row">
-        <span class="toggle-label">Live camera</span>
-        <label class="switch" title="Toggle background view">
-          <input type="checkbox" id="view-mode-bg" />
-          <span class="slider-pill"></span>
-        </label>
-        <span class="toggle-label">Background</span>
+      <div class="ctrl-row">
+        <label for="view-mode">Mode</label>
+        <select id="view-mode" class="cam-select">
+          <option value="live" selected>Live</option>
+          <option value="background">Background</option>
+          <option value="difference">Difference</option>
+        </select>
       </div>
     </div>
 

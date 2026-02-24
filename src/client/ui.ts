@@ -14,7 +14,7 @@ export interface AppConfig {
   audioThreshold:  number;   // audio delta threshold (0–255)
   audioBandpassCenter: number; // audio detector bandpass center frequency (Hz)
   audioBandpassQ:      number; // audio detector bandpass Q
-  viewMode:        ViewMode; // 'live' | 'background'
+  viewMode:        ViewMode; // 'live' | 'background' | 'difference'
   backgroundAlpha: number;   // EMA learning rate (0–1)
   morseUnitMs:     number;   // Morse unit duration in ms
   zone: ZoneConfig;
@@ -89,9 +89,9 @@ export class UI {
     this.slider('audio-bp-q', 0.2, 20, 0.1, this.config.audioBandpassQ,
       v => { this.config.audioBandpassQ = v; });
 
-    // ── View toggle ──────────────────────────────────────────────────────────
-    this.toggle('view-mode-bg', v => {
-      this.config.viewMode = v ? 'background' : 'live';
+    // ── View mode ────────────────────────────────────────────────────────────
+    this.select('view-mode', v => {
+      this.config.viewMode = v === 'background' || v === 'difference' ? v : 'live';
     });
 
     // ── Background model ─────────────────────────────────────────────────────

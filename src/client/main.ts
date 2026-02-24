@@ -41,7 +41,7 @@ const SENSOR_CONTROL_IDS = [
   'audio-threshold',
   'audio-bp-center',
   'audio-bp-q',
-  'view-mode-bg',
+  'view-mode',
   'bg-alpha',
   'zone-radius',
   'motion-unit-rad',
