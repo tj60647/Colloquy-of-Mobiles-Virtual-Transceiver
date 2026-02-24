@@ -132,10 +132,6 @@ export class UI {
     this.slider('v-fov', 10, 120, 1, this.config.fov.vFov,
       v => { this.config.fov.vFov = v; });
 
-    // ── Morse ────────────────────────────────────────────────────────────────
-    this.slider('morse-unit', 30, 600, 10, this.config.morseUnitMs,
-      v => { this.config.morseUnitMs = v; });
-
     // ── Buttons ──────────────────────────────────────────────────────────────
     document.getElementById('btn-reset-bg')?.addEventListener('click', () => {
       this.onResetBackground?.();

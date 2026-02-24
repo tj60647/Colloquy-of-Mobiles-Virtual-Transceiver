@@ -193,24 +193,6 @@
       </div>
     </div>
 
-    <!-- Colloquy decoder -->
-    <div class="section">
-      <div class="section-label">Colloquy decoder</div>
-      <div class="ctrl-row">
-        <label for="morse-unit">Unit ms</label>
-        <input type="range" id="morse-unit" />
-        <span class="ctrl-val" id="morse-unit-val">100</span>
-      </div>
-      <div style="font-size:10px;color:var(--muted);margin-top:2px;">
-        1 unit = dot duration.  Dash ≥ 2.5 units.
-      </div>
-      <div class="btn-row" style="margin-top:8px;">
-        <button id="btn-reset-decode" class="danger">
-          Clear decode
-        </button>
-      </div>
-    </div>
-
     <!-- Camera properties -->
     <div class="section">
       <div class="section-label">Camera properties</div>
@@ -236,8 +218,12 @@
         <span class="match-score"></span>
       </div>
       <div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.6;">
-        Matches the 8-word dictionary (40 segments @ 40 Hz).<br>
-        Resets with the Morse decoder clear button.
+        Matches the 8-word dictionary (40 segments @ 40 Hz).
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button id="btn-reset-decode" class="danger">
+          Clear buffer
+        </button>
       </div>
       <div class="btn-row" style="margin-top:6px;">
         <a href="/flash" target="_blank" style="

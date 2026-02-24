@@ -53,7 +53,6 @@ const SENSOR_CONTROL_IDS = [
   'y-max-acc',
   'h-fov',
   'v-fov',
-  'morse-unit',
 ] as const;
 
 type SensorControlMap = Record<string, string | boolean>;
