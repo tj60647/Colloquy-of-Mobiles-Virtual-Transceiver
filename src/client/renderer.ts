@@ -266,6 +266,20 @@ export class Renderer {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
     ctx.fillRect(x, y + 1, w, h);
 
+    const drawGuide = (hz: number): void => {
+      const clamped = Math.max(minHz, Math.min(maxHz, hz));
+      const gy = y + h - 1 - ((clamped - minHz) / range) * (h - 2);
+      ctx.beginPath();
+      ctx.moveTo(x, gy);
+      ctx.lineTo(x + w, gy);
+      ctx.strokeStyle = 'rgba(180, 180, 180, 0.22)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    };
+
+    drawGuide(20);
+    drawGuide(40);
+
     if (history.length >= 2) {
       const samples = history.length > w ? this.resampleToWidth(history, w) : history;
 

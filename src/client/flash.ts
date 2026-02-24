@@ -36,7 +36,9 @@ const startBtn     = document.getElementById('start-btn') as HTMLButtonElement;
 const wordGrid     = document.getElementById('word-grid')!;
 const patternBar   = document.getElementById('pattern-bar')!;
 const loopCount    = document.getElementById('loop-count')!;
-const effectiveHzEl = document.getElementById('effective-hz')!;
+const effectiveHzWrapEl = document.getElementById('effective-hz-wrap') as HTMLDivElement;
+const effectiveHzGraphEl = document.getElementById('effective-hz-graph') as HTMLCanvasElement;
+const effectiveHzTextEl = document.getElementById('effective-hz-text')!;
 const camPreview   = document.getElementById('cam-preview') as HTMLVideoElement;
 const modeFlashBtn = document.getElementById('mode-flash') as HTMLButtonElement;
 const modeSoundBtn = document.getElementById('mode-sound') as HTMLButtonElement;
@@ -66,6 +68,133 @@ let invertTransmission = false;
 let txRateHz: 20 | 40 = 40;
 let lastTickWallTs = 0;
 let effectiveHz = 0;
+const effectiveHzHistory: number[] = [];
+
+const EFFECTIVE_GRAPH_MIN_HZ = 10;
+const EFFECTIVE_GRAPH_MAX_HZ = 50;
+const RATE_DEBUG_WINDOW_MS = 30_000;
+
+type TickStat = { wallTs: number; dtMs: number; instHz: number };
+const tickStats: TickStat[] = [];
+let lastDebugLogWallTs = 0;
+
+function setEffectiveHzText(hz: number): void {
+  effectiveHzTextEl.textContent = hz > 0 ? `effective: ${hz.toFixed(1)} Hz` : 'effective: --.- Hz';
+}
+
+function resetEffectiveHzGraph(): void {
+  effectiveHzHistory.length = 0;
+  drawEffectiveHzGraph();
+}
+
+function pushEffectiveHz(hz: number): void {
+  if (!Number.isFinite(hz) || hz <= 0) return;
+
+  effectiveHzHistory.push(hz);
+  const maxSamples = 1_500;
+  if (effectiveHzHistory.length > maxSamples) {
+    effectiveHzHistory.splice(0, effectiveHzHistory.length - maxSamples);
+  }
+
+  drawEffectiveHzGraph();
+}
+
+function drawEffectiveHzGraph(): void {
+  const ctx = effectiveHzGraphEl.getContext('2d');
+  if (!ctx) return;
+
+  const cssWidth = Math.max(1, Math.floor(effectiveHzWrapEl.clientWidth));
+  const cssHeight = Math.max(1, Math.floor(effectiveHzWrapEl.clientHeight));
+  const dpr = window.devicePixelRatio || 1;
+
+  const pxWidth = Math.max(1, Math.floor(cssWidth * dpr));
+  const pxHeight = Math.max(1, Math.floor(cssHeight * dpr));
+
+  if (effectiveHzGraphEl.width !== pxWidth || effectiveHzGraphEl.height !== pxHeight) {
+    effectiveHzGraphEl.width = pxWidth;
+    effectiveHzGraphEl.height = pxHeight;
+  }
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, pxWidth, pxHeight);
+  ctx.scale(dpr, dpr);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.fillRect(0, 2, cssWidth, Math.max(1, cssHeight - 4));
+
+  const drawGuide = (hz: number): void => {
+    const clamped = Math.max(EFFECTIVE_GRAPH_MIN_HZ, Math.min(EFFECTIVE_GRAPH_MAX_HZ, hz));
+    const gy = 2 + (Math.max(2, cssHeight - 4) - 1)
+      - ((clamped - EFFECTIVE_GRAPH_MIN_HZ) / (EFFECTIVE_GRAPH_MAX_HZ - EFFECTIVE_GRAPH_MIN_HZ))
+        * (Math.max(2, cssHeight - 4) - 1);
+    ctx.beginPath();
+    ctx.moveTo(0, gy);
+    ctx.lineTo(cssWidth, gy);
+    ctx.strokeStyle = 'rgba(180, 180, 180, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
+
+  drawGuide(20);
+  drawGuide(40);
+
+  if (effectiveHzHistory.length < 2) return;
+
+  const plotHeight = Math.max(2, cssHeight - 4);
+  const plotTop = 2;
+  const range = EFFECTIVE_GRAPH_MAX_HZ - EFFECTIVE_GRAPH_MIN_HZ;
+  const maxPoints = Math.max(2, cssWidth);
+  const values = effectiveHzHistory.length > maxPoints
+    ? effectiveHzHistory.slice(effectiveHzHistory.length - maxPoints)
+    : effectiveHzHistory;
+
+  ctx.beginPath();
+  for (let i = 0; i < values.length; i++) {
+    const hz = Math.max(EFFECTIVE_GRAPH_MIN_HZ, Math.min(EFFECTIVE_GRAPH_MAX_HZ, values[i]));
+    const nx = values.length <= 1 ? 0 : i / (values.length - 1);
+    const x = nx * (cssWidth - 1);
+    const y = plotTop + (plotHeight - 1) - ((hz - EFFECTIVE_GRAPH_MIN_HZ) / range) * (plotHeight - 1);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = 'rgba(0, 229, 255, 0.70)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function logRateDebugWindow(nowWallTs: number): void {
+  const cutoff = nowWallTs - RATE_DEBUG_WINDOW_MS;
+  while (tickStats.length && tickStats[0].wallTs < cutoff) {
+    tickStats.shift();
+  }
+
+  if (tickStats.length < 10) return;
+  if (lastDebugLogWallTs > 0 && nowWallTs - lastDebugLogWallTs < RATE_DEBUG_WINDOW_MS) return;
+
+  const hzValues = tickStats.map((s) => s.instHz);
+  const dtValues = tickStats.map((s) => s.dtMs);
+  const sortedHz = [...hzValues].sort((a, b) => a - b);
+  const sortedDt = [...dtValues].sort((a, b) => a - b);
+
+  const meanHz = hzValues.reduce((sum, v) => sum + v, 0) / hzValues.length;
+  const targetHz = txRateHz;
+  const targetDt = 1000 / targetHz;
+  const meanDt = dtValues.reduce((sum, v) => sum + v, 0) / dtValues.length;
+  const p95Dt = sortedDt[Math.floor((sortedDt.length - 1) * 0.95)];
+  const p50Hz = sortedHz[Math.floor((sortedHz.length - 1) * 0.50)];
+  const p95Hz = sortedHz[Math.floor((sortedHz.length - 1) * 0.95)];
+  const minHz = sortedHz[0];
+  const maxHz = sortedHz[sortedHz.length - 1];
+
+  console.info(
+    `[tx-rate] 30s n=${tickStats.length} target=${targetHz.toFixed(1)}Hz ` +
+    `mean=${meanHz.toFixed(2)}Hz p50=${p50Hz.toFixed(2)}Hz p95=${p95Hz.toFixed(2)}Hz ` +
+    `min=${minHz.toFixed(2)}Hz max=${maxHz.toFixed(2)}Hz ` +
+    `meanDt=${meanDt.toFixed(2)}ms p95Dt=${p95Dt.toFixed(2)}ms targetDt=${targetDt.toFixed(2)}ms`,
+  );
+
+  lastDebugLogWallTs = nowWallTs;
+}
 
 const canUseMediaDevices =
   !!navigator.mediaDevices &&
@@ -379,7 +508,10 @@ function tick(): void {
     if (dt > 0) {
       const instHz = 1000 / dt;
       effectiveHz = effectiveHz === 0 ? instHz : (0.18 * instHz + 0.82 * effectiveHz);
-      effectiveHzEl.textContent = `effective: ${effectiveHz.toFixed(1)} Hz`;
+      tickStats.push({ wallTs: now, dtMs: dt, instHz });
+      logRateDebugWindow(now);
+      setEffectiveHzText(effectiveHz);
+      pushEffectiveHz(effectiveHz);
     }
   }
   lastTickWallTs = now;
@@ -424,7 +556,10 @@ function startLoop(): void {
   loops     = 0;
   lastTickWallTs = 0;
   effectiveHz = 0;
-  effectiveHzEl.textContent = 'effective: --.- Hz';
+  tickStats.length = 0;
+  lastDebugLogWallTs = 0;
+  setEffectiveHzText(0);
+  resetEffectiveHzGraph();
   loopCount.textContent = 'Loop 1';
   tick();
 }
@@ -489,7 +624,8 @@ function stop(): void {
   indicator.classList.remove('on');
   renderPatternBar(selectedWord, -1);
   loopCount.textContent = '';
-  effectiveHzEl.textContent = 'effective: --.- Hz';
+  setEffectiveHzText(0);
+  resetEffectiveHzGraph();
   startBtn.textContent = mode === 'flash' ? 'Start Flashing' : 'Start Tone';
   startBtn.classList.remove('running');
   setStatus('Stopped.');
@@ -542,3 +678,10 @@ window.addEventListener('pagehide', () => {
   releaseTorch();
   stopAudio();
 });
+
+window.addEventListener('resize', () => {
+  drawEffectiveHzGraph();
+});
+
+setEffectiveHzText(0);
+drawEffectiveHzGraph();

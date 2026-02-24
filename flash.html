@@ -161,11 +161,32 @@
       color: var(--muted);
     }
 
+    #effective-hz-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 380px;
+      height: 20px;
+    }
+
+    #effective-hz-graph {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 0;
+    }
+
     #effective-hz {
+      position: relative;
+      z-index: 1;
       font-size: 0.72rem;
       color: var(--accent);
       opacity: 0.9;
       letter-spacing: 0.02em;
+      text-align: center;
+      line-height: 20px;
+      user-select: none;
     }
 
     /* ── Hidden video (needed for torch API) ─────────── */
@@ -391,7 +412,10 @@
   <div id="pattern-bar"></div>
 
   <div id="loop-count"></div>
-  <div id="effective-hz">effective: --.- Hz</div>
+  <div id="effective-hz-wrap">
+    <canvas id="effective-hz-graph"></canvas>
+    <div id="effective-hz"><span id="effective-hz-text">effective: --.- Hz</span></div>
+  </div>
 
   <video id="cam-preview" autoplay muted playsinline></video>
 
