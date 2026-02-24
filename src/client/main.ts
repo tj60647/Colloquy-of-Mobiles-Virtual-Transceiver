@@ -203,6 +203,7 @@ async function main(): Promise<void> {
   const camControls = camPropsEl
     ? new CameraControls(camPropsEl, camera)
     : null;
+  const camDeviceEl = document.getElementById('camera-device') as HTMLSelectElement | null;
 
   // Build once on startup
   camControls?.build();
@@ -236,6 +237,71 @@ async function main(): Promise<void> {
   const matcher = new PatternMatcher();
   const audioDet = new AudioDetector(ui.config.audioBandpassCenter, ui.config.audioBandpassQ);
   const renderer= new Renderer(canvas, ctx);
+
+  async function refreshCameraSelector(): Promise<void> {
+    if (!camDeviceEl) return;
+
+    const devices = await camera.listVideoInputs();
+    const previous = camDeviceEl.value;
+    const selected = camera.selectedDeviceId;
+
+    camDeviceEl.innerHTML = '';
+
+    if (devices.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Default camera';
+      camDeviceEl.appendChild(option);
+      camDeviceEl.disabled = true;
+      return;
+    }
+
+    devices.forEach((device, index) => {
+      const option = document.createElement('option');
+      option.value = device.deviceId;
+      option.textContent = device.label || `Camera ${index + 1}`;
+      camDeviceEl.appendChild(option);
+    });
+
+    if (selected && devices.some((d) => d.deviceId === selected)) {
+      camDeviceEl.value = selected;
+    } else if (previous && devices.some((d) => d.deviceId === previous)) {
+      camDeviceEl.value = previous;
+    } else {
+      camDeviceEl.value = devices[0].deviceId;
+    }
+
+    camDeviceEl.disabled = devices.length <= 1;
+  }
+
+  camDeviceEl?.addEventListener('change', async () => {
+    const nextDeviceId = camDeviceEl.value;
+    if (!nextDeviceId || nextDeviceId === camera.selectedDeviceId) return;
+
+    camDeviceEl.disabled = true;
+    setStatus('Switching camera…');
+
+    try {
+      await camera.switchDevice(nextDeviceId);
+      canvas.width  = camera.width;
+      canvas.height = camera.height;
+      offCanvas.width  = camera.width;
+      offCanvas.height = camera.height;
+      zone.updateDimensions(camera.width, camera.height);
+      camControls?.build();
+      setStatus('Camera ready.');
+    } catch (err) {
+      setStatus(`Camera error: ${String(err)}`);
+    }
+
+    await refreshCameraSelector();
+  });
+
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => {
+    void refreshCameraSelector();
+  });
+
+  await refreshCameraSelector();
 
   const matchEl = document.getElementById('pattern-match');
   const matchWordEl  = matchEl?.querySelector('.match-word')  as HTMLElement | null;

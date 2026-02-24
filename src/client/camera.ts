@@ -70,6 +70,7 @@ export interface ExtendedMediaTrackSettings extends MediaTrackSettings {
 export class CameraManager {
   private readonly video: HTMLVideoElement;
   private stream: MediaStream | null = null;
+  private currentDeviceId: string | null = null;
 
   constructor() {
     this.video = document.createElement('video');
@@ -83,8 +84,31 @@ export class CameraManager {
    * Prefers 640×480 @ ≥60 fps so the 40 Hz sample loop has headroom.
    */
   async initialize(): Promise<void> {
+    await this.startStream();
+  }
+
+  async listVideoInputs(): Promise<MediaDeviceInfo[]> {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') {
+      return [];
+    }
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((d) => d.kind === 'videoinput');
+  }
+
+  get selectedDeviceId(): string | null {
+    return this.currentDeviceId;
+  }
+
+  async switchDevice(deviceId: string): Promise<void> {
+    await this.startStream(deviceId);
+  }
+
+  private async startStream(deviceId?: string): Promise<void> {
+    this.stop();
+
     this.stream = await navigator.mediaDevices.getUserMedia({
       video: {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
         width:     { ideal: 640 },
         height:    { ideal: 480 },
         frameRate: { ideal: 60, min: 30 },
@@ -99,6 +123,9 @@ export class CameraManager {
     });
 
     await this.video.play();
+
+    const trackSettings = this.stream.getVideoTracks()[0]?.getSettings();
+    this.currentDeviceId = trackSettings?.deviceId ?? deviceId ?? null;
   }
 
   // ── Frame dimensions ─────────────────────────────────────────────────────
