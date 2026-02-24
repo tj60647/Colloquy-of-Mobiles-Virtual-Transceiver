@@ -405,7 +405,7 @@ async function main(): Promise<void> {
   let lastSampleWallTs = 0;
   let effectiveSampleHz = 0;
   let sampleRateLogStartWallTs = 0;
-  let sampleRateLogDone = false;
+  let lastSampleRateLogWallTs = 0;
   const sampleRateHistory: RateSample[] = [];
 
   function pushSampleRate(hz: number, wallTs: number): void {
@@ -419,7 +419,10 @@ async function main(): Promise<void> {
       sampleRateHistory.shift();
     }
 
-    if (!sampleRateLogDone && wallTs - sampleRateLogStartWallTs >= SAMPLE_RATE_LOG_WINDOW_MS) {
+    if (wallTs - sampleRateLogStartWallTs < SAMPLE_RATE_LOG_WINDOW_MS) return;
+    if (lastSampleRateLogWallTs > 0 && wallTs - lastSampleRateLogWallTs < SAMPLE_RATE_LOG_WINDOW_MS) return;
+
+    if (sampleRateHistory.length >= 10) {
       const summary = summarizeRateSamples(sampleRateHistory.map((s) => s.hz));
       console.info(
         `[sample-rate] 30s window: n=${sampleRateHistory.length} ` +
@@ -427,7 +430,7 @@ async function main(): Promise<void> {
         `p50=${summary.p50.toFixed(2)}Hz p95=${summary.p95.toFixed(2)}Hz ` +
         `max=${summary.max.toFixed(2)}Hz`,
       );
-      sampleRateLogDone = true;
+      lastSampleRateLogWallTs = wallTs;
     }
   }
 

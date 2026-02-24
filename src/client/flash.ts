@@ -67,6 +67,7 @@ let selectedWord: DictWord = 'I_O';
 let invertTransmission = false;
 let txRateHz: 20 | 40 = 40;
 let lastTickWallTs = 0;
+let lastProcessedSegmentCount = -1;
 let effectiveHz = 0;
 const effectiveHzHistory: number[] = [];
 
@@ -77,6 +78,7 @@ const RATE_DEBUG_WINDOW_MS = 30_000;
 type TickStat = { wallTs: number; dtMs: number; instHz: number };
 const tickStats: TickStat[] = [];
 let lastDebugLogWallTs = 0;
+let debugRunStartWallTs = 0;
 
 function setEffectiveHzText(hz: number): void {
   effectiveHzTextEl.textContent = hz > 0 ? `effective: ${hz.toFixed(1)} Hz` : 'effective: --.- Hz';
@@ -169,6 +171,7 @@ function logRateDebugWindow(nowWallTs: number): void {
   }
 
   if (tickStats.length < 10) return;
+  if (debugRunStartWallTs === 0 || nowWallTs - debugRunStartWallTs < RATE_DEBUG_WINDOW_MS) return;
   if (lastDebugLogWallTs > 0 && nowWallTs - lastDebugLogWallTs < RATE_DEBUG_WINDOW_MS) return;
 
   const hzValues = tickStats.map((s) => s.instHz);
@@ -503,6 +506,17 @@ function tick(): void {
   if (!running) return;
 
   const now = performance.now();
+  const segmentMs = getSegmentMs();
+  const totalMs   = segmentMs * TOTAL_SEGMENTS;
+  const elapsed    = now - startTime;
+  const segmentCount = Math.floor(elapsed / segmentMs);
+  const nextBoundaryFromNow = (segmentCount + 1) * segmentMs - elapsed;
+
+  if (segmentCount === lastProcessedSegmentCount) {
+    timeoutId = setTimeout(tick, Math.max(1, nextBoundaryFromNow));
+    return;
+  }
+
   if (lastTickWallTs > 0) {
     const dt = now - lastTickWallTs;
     if (dt > 0) {
@@ -515,12 +529,10 @@ function tick(): void {
     }
   }
   lastTickWallTs = now;
+  lastProcessedSegmentCount = segmentCount;
 
-  const segmentMs = getSegmentMs();
-  const totalMs   = segmentMs * TOTAL_SEGMENTS;
-  const elapsed    = performance.now() - startTime;
   const posInLoop  = elapsed % totalMs;
-  const segIdx     = Math.floor(posInLoop / segmentMs);
+  const segIdx     = segmentCount % TOTAL_SEGMENTS;
   const inListenWindow = segIdx >= LISTEN_LEN;
   const torchOn    = getTransmitBit(selectedWord, segIdx, invertTransmission);
 
@@ -537,7 +549,7 @@ function tick(): void {
   renderPatternBar(selectedWord, segIdx);
 
   // Update loop counter
-  const newLoops = Math.floor(elapsed / totalMs);
+  const newLoops = Math.floor(segmentCount / TOTAL_SEGMENTS);
   if (newLoops !== loops) {
     loops = newLoops;
     loopCount.textContent = `Loop ${loops + 1}`;
@@ -546,18 +558,19 @@ function tick(): void {
   loopCount.textContent = `Loop ${loops + 1} · ${inListenWindow ? 'LISTEN' : 'TX'} · ${txRateHz}Hz`;
 
   // Schedule next tick at the start of the next segment
-  const nextBoundaryMs = (segIdx + 1) * segmentMs;
-  const timeUntilNext  = nextBoundaryMs - posInLoop;
-  timeoutId = setTimeout(tick, Math.max(1, timeUntilNext));
+  timeoutId = setTimeout(tick, Math.max(1, nextBoundaryFromNow));
 }
 
 function startLoop(): void {
-  startTime = performance.now();
+  const now = performance.now();
+  startTime = now;
   loops     = 0;
   lastTickWallTs = 0;
+  lastProcessedSegmentCount = -1;
   effectiveHz = 0;
   tickStats.length = 0;
   lastDebugLogWallTs = 0;
+  debugRunStartWallTs = now;
   setEffectiveHzText(0);
   resetEffectiveHzGraph();
   loopCount.textContent = 'Loop 1';
