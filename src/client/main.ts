@@ -31,6 +31,7 @@ import type { LightReading } from '../shared/types.js';
 const SENSOR_CONFIG_URL = '/config/sensor.config.json';
 const SENSOR_CONFIG_STORAGE_KEY = 'vcl.sensor.config.v1';
 const CAMERA_DEVICE_STORAGE_KEY = 'vcl.camera.deviceId.v1';
+const SAMPLE_RATE_LOG_WINDOW_MS = 30_000;
 
 const SENSOR_CONTROL_IDS = [
   'detector-mode',
@@ -57,6 +58,7 @@ const SENSOR_CONTROL_IDS = [
 ] as const;
 
 type SensorControlMap = Record<string, string | boolean>;
+type RateSample = { wallTs: number; hz: number };
 
 function toGrayscaleInPlace(imageData: ImageData): void {
   const d = imageData.data;
@@ -145,6 +147,27 @@ function savePreferredCameraDeviceId(deviceId: string): void {
 
 function clearPreferredCameraDeviceId(): void {
   localStorage.removeItem(CAMERA_DEVICE_STORAGE_KEY);
+}
+
+function summarizeRateSamples(samples: number[]): {
+  avg: number;
+  min: number;
+  max: number;
+  p50: number;
+  p95: number;
+} {
+  if (samples.length === 0) {
+    return { avg: 0, min: 0, max: 0, p50: 0, p95: 0 };
+  }
+
+  const sorted = [...samples].sort((a, b) => a - b);
+  const avg = samples.reduce((sum, v) => sum + v, 0) / samples.length;
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  const p50 = sorted[Math.floor((sorted.length - 1) * 0.50)];
+  const p95 = sorted[Math.floor((sorted.length - 1) * 0.95)];
+
+  return { avg, min, max, p50, p95 };
 }
 
 function isLikelyMobile(): boolean {
@@ -381,6 +404,32 @@ async function main(): Promise<void> {
   let prevSampleIntervalMs = 1000 / ui.config.sampleRateHz;
   let lastSampleWallTs = 0;
   let effectiveSampleHz = 0;
+  let sampleRateLogStartWallTs = 0;
+  let sampleRateLogDone = false;
+  const sampleRateHistory: RateSample[] = [];
+
+  function pushSampleRate(hz: number, wallTs: number): void {
+    if (!Number.isFinite(hz) || hz <= 0) return;
+
+    if (sampleRateLogStartWallTs === 0) sampleRateLogStartWallTs = wallTs;
+
+    sampleRateHistory.push({ wallTs, hz });
+    const cutoff = wallTs - SAMPLE_RATE_LOG_WINDOW_MS;
+    while (sampleRateHistory.length && sampleRateHistory[0].wallTs < cutoff) {
+      sampleRateHistory.shift();
+    }
+
+    if (!sampleRateLogDone && wallTs - sampleRateLogStartWallTs >= SAMPLE_RATE_LOG_WINDOW_MS) {
+      const summary = summarizeRateSamples(sampleRateHistory.map((s) => s.hz));
+      console.info(
+        `[sample-rate] 30s window: n=${sampleRateHistory.length} ` +
+        `avg=${summary.avg.toFixed(2)}Hz min=${summary.min.toFixed(2)}Hz ` +
+        `p50=${summary.p50.toFixed(2)}Hz p95=${summary.p95.toFixed(2)}Hz ` +
+        `max=${summary.max.toFixed(2)}Hz`,
+      );
+      sampleRateLogDone = true;
+    }
+  }
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -448,6 +497,7 @@ async function main(): Promise<void> {
           effectiveSampleHz = effectiveSampleHz === 0
             ? instHz
             : (0.18 * instHz + 0.82 * effectiveSampleHz);
+          pushSampleRate(effectiveSampleHz, wallNow);
         }
       }
       lastSampleWallTs = wallNow;
@@ -549,6 +599,7 @@ async function main(): Promise<void> {
       audioBandpassCenter: ui.config.audioBandpassCenter,
       audioBandpassQ:  ui.config.audioBandpassQ,
       effectiveHz:     effectiveSampleHz,
+      sampleRateHistoryHz: sampleRateHistory.map((s) => s.hz),
       threshold:       ui.config.detectorMode === 'audio' ? ui.config.audioThreshold : ui.config.threshold,
       wsConnected:     wsClient.connected,
     });

@@ -23,6 +23,7 @@ export interface RenderParams {
   audioBandpassCenter: number;
   audioBandpassQ:  number;
   effectiveHz:     number;
+  sampleRateHistoryHz: number[];
   threshold:       number;
   wsConnected:     boolean;
 }
@@ -205,6 +206,11 @@ export class Renderer {
         ]
       : [['STATUS', 'Initialising…']];
 
+    const rateLineIdx = lines.findIndex(([label]) => label.trim() === 'RATE');
+    if (rateLineIdx >= 0) {
+      this.drawRateSparkline(p.sampleRateHistoryHz, 78, hudTopPad + rateLineIdx * hudRowGap, panelW - 88, 12);
+    }
+
     lines.forEach(([label, value], i) => {
       const y = hudTopPad + i * hudRowGap;
       ctx.fillStyle = '#5a7a5a';
@@ -246,6 +252,56 @@ export class Renderer {
     this.drawPatternConfidenceColumn(ctx, p, WORDS_II, rightX, baseY, confidenceRowGap);
 
     ctx.restore();
+  }
+
+  private drawRateSparkline(history: number[], x: number, y: number, w: number, h: number): void {
+    if (w <= 4 || h <= 4) return;
+
+    const { ctx } = this;
+    const minHz = 10;
+    const maxHz = 50;
+    const range = maxHz - minHz;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.fillRect(x, y + 1, w, h);
+
+    if (history.length >= 2) {
+      const samples = history.length > w ? this.resampleToWidth(history, w) : history;
+
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i++) {
+        const hz = Math.max(minHz, Math.min(maxHz, samples[i]));
+        const nx = samples.length <= 1 ? 0 : i / (samples.length - 1);
+        const px = x + nx * (w - 1);
+        const ny = y + h - 1 - ((hz - minHz) / range) * (h - 2);
+        if (i === 0) ctx.moveTo(px, ny);
+        else ctx.lineTo(px, ny);
+      }
+      ctx.strokeStyle = 'rgba(0, 255, 136, 0.55)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  private resampleToWidth(values: number[], width: number): number[] {
+    if (values.length <= width) return values;
+
+    const out: number[] = [];
+    for (let x = 0; x < width; x++) {
+      const start = Math.floor((x * values.length) / width);
+      const end = Math.floor(((x + 1) * values.length) / width);
+      let sum = 0;
+      let count = 0;
+      for (let i = start; i < Math.max(start + 1, end); i++) {
+        sum += values[i];
+        count++;
+      }
+      out.push(count > 0 ? sum / count : values[start]);
+    }
+    return out;
   }
 
   private drawPatternConfidenceColumn(
