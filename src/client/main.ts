@@ -25,13 +25,14 @@ import { Renderer          } from './renderer.js';
 import { WsClient          } from './wsClient.js';
 import { UI                } from './ui.js';
 import { DICT_LABELS       } from '../shared/dictionary.js';
-import { TX_CYCLE_LEN } from '../shared/dictionary.js';
+import { PATTERN_LEN } from '../shared/dictionary.js';
 import type { LightReading } from '../shared/types.js';
 
 const SENSOR_CONFIG_URL = '/config/sensor.config.json';
 const SENSOR_CONFIG_STORAGE_KEY = 'vcl.sensor.config.v1';
 const CAMERA_DEVICE_STORAGE_KEY = 'vcl.camera.deviceId.v1';
 const SAMPLE_RATE_LOG_WINDOW_MS = 30_000;
+const HUD_SPARKLINE_SAMPLES = 152;
 
 const SENSOR_CONTROL_IDS = [
   'detector-mode',
@@ -41,6 +42,7 @@ const SENSOR_CONTROL_IDS = [
   'audio-threshold',
   'audio-bp-center',
   'audio-bp-q',
+  'pattern-threshold',
   'view-mode',
   'bg-alpha',
   'zone-radius',
@@ -186,6 +188,14 @@ function canUseCamera(): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
+function formatCameraError(err: unknown): string {
+  const text = String(err);
+  if (/NotReadableError/i.test(text)) {
+    return 'Camera is busy or blocked by another app/tab. Close other camera users and retry.';
+  }
+  return text;
+}
+
 async function main(): Promise<void> {
   // ── DOM ───────────────────────────────────────────────────────────────────
   const canvas = document.getElementById('main-canvas') as HTMLCanvasElement;
@@ -223,16 +233,20 @@ async function main(): Promise<void> {
 
   // ── Camera ────────────────────────────────────────────────────────────────
   const camera = new CameraManager();
+  let cameraReady = false;
   try {
     await camera.initialize();
+    cameraReady = true;
   } catch (err) {
-    setStatus(`Camera error: ${String(err)}`);
-    throw err;
+    setStatus(`Camera error: ${formatCameraError(err)}`);
+    setCompat('Camera failed to start. Select another device or free the camera in other apps.', 'warn');
   }
 
   canvas.width  = camera.width;
   canvas.height = camera.height;
-  setStatus('Camera ready.');
+  if (cameraReady) {
+    setStatus('Camera ready.');
+  }
 
   // ── Camera controls panel ─────────────────────────────────────────────────
   const camPropsEl = document.getElementById('cam-props');
@@ -247,13 +261,14 @@ async function main(): Promise<void> {
   // Allow manual refresh (useful after switching cameras)
   document.getElementById('btn-refresh-cam')?.addEventListener('click', () => {
     camControls?.build();
+    void refreshCameraSelector();
   });
 
   // ── Off-screen canvas for frame capture ───────────────────────────────────
   const offCanvas = document.createElement('canvas');
   offCanvas.width  = camera.width;
   offCanvas.height = camera.height;
-  const offCtx = offCanvas.getContext('2d')!;
+  const offCtx = offCanvas.getContext('2d', { willReadFrequently: true })!;
 
   // ── Subsystems ────────────────────────────────────────────────────────────
   const ui      = new UI();
@@ -267,8 +282,8 @@ async function main(): Promise<void> {
   const zone    = new SensitivityZone(camera.width, camera.height, ui.config.zone, ui.config.fov);
   const fov     = new FovMapper(ui.config.fov);
   const det     = new LightDetector(ui.config.threshold);
-  const rb      = new RingBuffer<boolean>(TX_CYCLE_LEN);
-  for (let i = 0; i < TX_CYCLE_LEN; i++) rb.push(false);
+  const rb      = new RingBuffer<boolean>(PATTERN_LEN);
+  for (let i = 0; i < PATTERN_LEN; i++) rb.push(false);
   const decoder = new PatternDecoder(ui.config.morseUnitMs);
   const matcher = new PatternMatcher();
   const audioDet = new AudioDetector(ui.config.audioBandpassCenter, ui.config.audioBandpassQ);
@@ -325,6 +340,7 @@ async function main(): Promise<void> {
 
     try {
       await camera.switchDevice(nextDeviceId);
+      cameraReady = true;
       canvas.width  = camera.width;
       canvas.height = camera.height;
       offCanvas.width  = camera.width;
@@ -332,10 +348,13 @@ async function main(): Promise<void> {
       zone.updateDimensions(camera.width, camera.height);
       camControls?.build();
       savePreferredCameraDeviceId(nextDeviceId);
+      setCompat('Camera connected.', 'ok');
       setStatus('Camera ready.');
       return true;
     } catch (err) {
-      setStatus(`Camera error: ${String(err)}`);
+      cameraReady = false;
+      setStatus(`Camera error: ${formatCameraError(err)}`);
+      setCompat('Camera failed to switch. Check permissions/device availability.', 'warn');
       return false;
     }
   }
@@ -393,7 +412,7 @@ async function main(): Promise<void> {
     decoder.reset();
     matcher.reset();
     rb.clear();
-    for (let i = 0; i < TX_CYCLE_LEN; i++) rb.push(false);
+    for (let i = 0; i < PATTERN_LEN; i++) rb.push(false);
   };
 
   // ── Main loop ─────────────────────────────────────────────────────────────
@@ -407,6 +426,20 @@ async function main(): Promise<void> {
   let sampleRateLogStartWallTs = 0;
   let lastSampleRateLogWallTs = 0;
   const sampleRateHistory: RateSample[] = [];
+  const sampleRateGraphHistory: number[] = [];
+  const deltaHistory: number[] = [];
+
+  function pushGraphSample(history: number[], value: number): void {
+    history.push(value);
+    if (history.length > HUD_SPARKLINE_SAMPLES) {
+      history.splice(0, history.length - HUD_SPARKLINE_SAMPLES);
+    }
+  }
+
+  function pushDeltaSample(delta: number): void {
+    if (!Number.isFinite(delta)) return;
+    pushGraphSample(deltaHistory, delta);
+  }
 
   function pushSampleRate(hz: number, wallTs: number): void {
     if (!Number.isFinite(hz) || hz <= 0) return;
@@ -414,6 +447,7 @@ async function main(): Promise<void> {
     if (sampleRateLogStartWallTs === 0) sampleRateLogStartWallTs = wallTs;
 
     sampleRateHistory.push({ wallTs, hz });
+    pushGraphSample(sampleRateGraphHistory, hz);
     const cutoff = wallTs - SAMPLE_RATE_LOG_WINDOW_MS;
     while (sampleRateHistory.length && sampleRateHistory[0].wallTs < cutoff) {
       sampleRateHistory.shift();
@@ -439,6 +473,7 @@ async function main(): Promise<void> {
       setStatus('Paused while tab is hidden.');
     } else {
       lastSampleTs = performance.now();
+      lastSampleWallTs = 0;
       setStatus('Resumed.');
     }
   });
@@ -454,6 +489,7 @@ async function main(): Promise<void> {
     zone.updateFov(ui.config.fov);
     fov.config           = ui.config.fov;
     det.threshold        = ui.config.threshold;
+    matcher.threshold    = ui.config.patternMatchThreshold;
     decoder.unitMs       = ui.config.morseUnitMs;
     zone.updateDimensions(camera.width, camera.height);
     audioDet.setBandpass(ui.config.audioBandpassCenter, ui.config.audioBandpassQ);
@@ -482,29 +518,20 @@ async function main(): Promise<void> {
     if (Math.abs(sampleIntervalMs - prevSampleIntervalMs) > 0.001) {
       lastSampleTs = timestamp;
       prevSampleIntervalMs = sampleIntervalMs;
+      lastSampleWallTs = 0;
     }
 
-    let catchUp = 0;
-    const maxCatchUpTicks = 3;
+    if (cameraReady) {
+      let catchUp = 0;
+      const maxCatchUpTicks = 3;
+      let processedTick = false;
 
-    while (timestamp - lastSampleTs >= sampleIntervalMs && catchUp < maxCatchUpTicks) {
-      lastSampleTs += sampleIntervalMs;
-      catchUp++;
+      while (timestamp - lastSampleTs >= sampleIntervalMs && catchUp < maxCatchUpTicks) {
+        lastSampleTs += sampleIntervalMs;
+        catchUp++;
+        processedTick = true;
 
       const sampleTs = lastSampleTs;
-      const wallNow = performance.now();
-      if (lastSampleWallTs > 0) {
-        const dt = wallNow - lastSampleWallTs;
-        if (dt > 0) {
-          const instHz = 1000 / dt;
-          effectiveSampleHz = effectiveSampleHz === 0
-            ? instHz
-            : (0.18 * instHz + 0.82 * effectiveSampleHz);
-          pushSampleRate(effectiveSampleHz, wallNow);
-        }
-      }
-      lastSampleWallTs = wallNow;
-
       if (ui.config.detectorMode === 'light') {
         if (!bgModel.isInitialized) break;
         lastAudioSpectrum = null;
@@ -529,7 +556,14 @@ async function main(): Promise<void> {
           }
         }
 
-        wsClient.sendReading(reading);
+        const match = matcher.lastMatch;
+        wsClient.sendReading({
+          ...reading,
+          sampleRateHz: ui.config.sampleRateHz,
+          patternDetected: match?.word ?? null,
+          patternScore: match?.score,
+        });
+        pushDeltaSample(reading.delta);
       } else {
         if (!audioDet.isInitialized) {
           if (!audioInitPending) {
@@ -582,8 +616,32 @@ async function main(): Promise<void> {
           }
         }
 
-        wsClient.sendReading(reading);
+        const match = matcher.lastMatch;
+        wsClient.sendReading({
+          ...reading,
+          sampleRateHz: ui.config.sampleRateHz,
+          patternDetected: match?.word ?? null,
+          patternScore: match?.score,
+        });
+        pushDeltaSample(reading.delta);
       }
+    }
+
+      if (processedTick) {
+        const wallNow = timestamp;
+        if (lastSampleWallTs > 0) {
+          const dt = wallNow - lastSampleWallTs;
+          if (dt > 0) {
+            const instHz = 1000 / dt;
+            effectiveSampleHz = effectiveSampleHz === 0
+              ? instHz
+              : (0.18 * instHz + 0.82 * effectiveSampleHz);
+            pushSampleRate(effectiveSampleHz, wallNow);
+          }
+        }
+        lastSampleWallTs = wallNow;
+      }
+
     }
 
     // ── Render ───────────────────────────────────────────────────────────────
@@ -602,7 +660,8 @@ async function main(): Promise<void> {
       audioBandpassCenter: ui.config.audioBandpassCenter,
       audioBandpassQ:  ui.config.audioBandpassQ,
       effectiveHz:     effectiveSampleHz,
-      sampleRateHistoryHz: sampleRateHistory.map((s) => s.hz),
+      sampleRateHistoryHz: sampleRateGraphHistory,
+      deltaHistory,
       threshold:       ui.config.detectorMode === 'audio' ? ui.config.audioThreshold : ui.config.threshold,
       wsConnected:     wsClient.connected,
     });

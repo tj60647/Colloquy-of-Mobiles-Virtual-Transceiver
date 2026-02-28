@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Light Pattern Detector</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/src/client/styles.css" />
 </head>
 <body>
@@ -37,6 +38,29 @@
       </div>
     </div>
 
+    <!-- Camera properties -->
+    <div class="section">
+      <div class="section-label">Camera properties</div>
+      <div class="ctrl-row">
+        <label for="camera-device">Camera device</label>
+        <select id="camera-device" class="cam-select" disabled>
+          <option value="">Default camera</option>
+        </select>
+      </div>
+      <div class="btn-row" style="margin-bottom:8px;">
+        <button id="btn-refresh-cam">Refresh</button>
+      </div>
+      <!-- Populated dynamically by CameraControls.build() after camera init -->
+      <div id="cam-props">
+        <p class="cam-note">Waiting for camera…</p>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6;">
+        For light detection, set <em>Exposure mode → manual</em> then reduce
+        Exposure time + ISO so the background is dim and brief flashes stand out.
+        Full controls require Chrome/Edge.
+      </div>
+    </div>
+
     <!-- Detection -->
     <div class="section">
       <div class="section-label">Detection</div>
@@ -50,8 +74,8 @@
       <div class="ctrl-row">
         <label for="sample-rate">Sample Hz</label>
         <select id="sample-rate" class="cam-select">
-          <option value="40" selected>40</option>
-          <option value="20">20</option>
+          <option value="40">40</option>
+          <option value="20" selected>20</option>
         </select>
       </div>
       <div class="toggle-row" style="margin-bottom:10px;">
@@ -193,38 +217,21 @@
       </div>
     </div>
 
-    <!-- Camera properties -->
-    <div class="section">
-      <div class="section-label">Camera properties</div>
-      <div class="ctrl-row">
-        <label for="camera-device">Camera device</label>
-        <select id="camera-device" class="cam-select" disabled>
-          <option value="">Default camera</option>
-        </select>
-      </div>
-      <div class="btn-row" style="margin-bottom:8px;">
-        <button id="btn-refresh-cam">Refresh</button>
-      </div>
-      <!-- Populated dynamically by CameraControls.build() after camera init -->
-      <div id="cam-props">
-        <p class="cam-note">Waiting for camera…</p>
-      </div>
-      <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6;">
-        For light detection, set <em>Exposure mode → manual</em> then reduce
-        Exposure time + ISO so the background is dim and brief flashes stand out.
-        Full controls require Chrome/Edge.
-      </div>
-    </div>
-
     <!-- Pattern recognition -->
     <div class="section">
       <div class="section-label">Pattern recognition</div>
+      <div class="ctrl-row">
+        <label for="pattern-threshold">Match thr</label>
+        <input type="range" id="pattern-threshold" />
+        <span class="ctrl-val" id="pattern-threshold-val">0.875</span>
+      </div>
       <div id="pattern-match">
         <span class="match-word">—</span>
         <span class="match-score"></span>
       </div>
       <div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.6;">
-        Matches the 8-word dictionary (40 segments @ 40 Hz).
+        Matches dictionary words on the 40-sample TX window. The 40-sample
+        listen window is protocol spacing and is not used by matcher score.
       </div>
       <div class="btn-row" style="margin-top:8px;">
         <button id="btn-reset-decode" class="danger">
@@ -244,10 +251,14 @@
     <!-- WebSocket info -->
     <div class="ws-note">
       <strong style="color:var(--accent);">WebSocket subscriber</strong><br>
-      Connect to <code>ws://&lt;host&gt;/ws</code> and send:<br>
-      <code>{"type":"identify","payload":{"role":"subscriber"}}</code><br><br>
-      You will receive <code>sensor_reading</code> messages at 40 Hz containing
-      pixel coords, FOV angles, brightness delta, and detection state.
+      Connect to <code>ws://&lt;host&gt;/ws</code> and send either:<br>
+      <code>{"type":"identify","payload":{"role":"subscriber","mode":"full"}}</code><br>
+      <code>{"type":"identify","payload":{"role":"subscriber","mode":"pattern"}}</code><br><br>
+      <code>full</code> receives <code>sensor_reading</code> at the configured detection sample
+      rate (20 or 40 Hz). <code>pattern</code> receives only <code>pattern_detected</code> events.<br>
+      <a href="/demo" target="_blank" rel="noopener">Open WebSocket demo ↗</a>
+      <span style="opacity:0.6;"> · </span>
+      <a href="/pattern-demo" target="_blank" rel="noopener">Open Pattern Comparison demo ↗</a>
     </div>
 
   </aside>

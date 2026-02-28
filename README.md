@@ -152,6 +152,11 @@ or
 }
 ```
 
+Pattern matching behavior:
+- Matcher score is computed on the **TX window only** (`PATTERN_LEN = 40` samples).
+- The **LISTEN window** (`LISTEN_LEN = 40` samples) is protocol spacing and does
+  not contribute to matcher score.
+
 ### Ping/pong
 ```json
 { "type": "ping" }

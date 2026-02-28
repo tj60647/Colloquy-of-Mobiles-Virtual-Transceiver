@@ -13,6 +13,8 @@ export default defineConfig({
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
           if (req.url === '/flash') req.url = '/flash.html';
+          if (req.url === '/demo') req.url = '/demo.html';
+          if (req.url === '/pattern-demo') req.url = '/pattern-demo.html';
           next();
         });
       },
@@ -34,6 +36,8 @@ export default defineConfig({
       input: {
         main:  resolve(__dirname, 'index.html'),
         flash: resolve(__dirname, 'flash.html'),
+        demo:  resolve(__dirname, 'demo.html'),
+        patternDemo: resolve(__dirname, 'pattern-demo.html'),
       },
     },
   },

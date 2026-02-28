@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
-import type { WsMessage, IdentifyPayload } from '../shared/types.js';
+import type { WsMessage, IdentifyPayload, LightReading, PatternDetectedPayload, SubscriberMode } from '../shared/types.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 // Compiled output: dist/server/index.js  →  dist/client is one level up
@@ -42,6 +42,8 @@ const httpServer = http.createServer((req, res) => {
   const resolved =
     urlPath === '/'      ? '/index.html' :
     urlPath === '/flash' ? '/flash.html' :
+    urlPath === '/demo'  ? '/demo.html' :
+    urlPath === '/pattern-demo' ? '/pattern-demo.html' :
     urlPath;
   const filePath = path.join(DIST_CLIENT, resolved);
 
@@ -70,22 +72,31 @@ const wss = new WebSocketServer({ noServer: true });
 interface ClientState {
   ws: WebSocket;
   role: 'sensor' | 'subscriber' | 'unknown';
+  subscriberMode: SubscriberMode;
   connectedAt: number;
   alive: boolean;
+  lastPatternDetected: string | null;
 }
 
 const clients = new Set<ClientState>();
 
-function broadcast(msg: string, exclude?: WebSocket): void {
+function broadcastToMode(msg: string, mode: SubscriberMode, exclude?: WebSocket): void {
   for (const c of clients) {
-    if (c.role === 'subscriber' && c.ws !== exclude && c.ws.readyState === WebSocket.OPEN) {
+    if (c.role === 'subscriber' && c.subscriberMode === mode && c.ws !== exclude && c.ws.readyState === WebSocket.OPEN) {
       c.ws.send(msg);
     }
   }
 }
 
 wss.on('connection', (ws) => {
-  const state: ClientState = { ws, role: 'unknown', connectedAt: Date.now(), alive: true };
+  const state: ClientState = {
+    ws,
+    role: 'unknown',
+    subscriberMode: 'full',
+    connectedAt: Date.now(),
+    alive: true,
+    lastPatternDetected: null,
+  };
   clients.add(state);
   console.log(`[ws] client connected  total=${clients.size}`);
 
@@ -106,14 +117,40 @@ wss.on('connection', (ws) => {
         const p = msg.payload as IdentifyPayload | undefined;
         if (p?.role === 'sensor' || p?.role === 'subscriber') {
           state.role = p.role;
-          console.log(`[ws] client identified as ${state.role}`);
+          if (state.role === 'subscriber') {
+            state.subscriberMode = p.mode === 'pattern' ? 'pattern' : 'full';
+            console.log(`[ws] client identified as subscriber mode=${state.subscriberMode}`);
+          } else {
+            console.log(`[ws] client identified as sensor`);
+          }
         }
         break;
       }
 
       case 'sensor_reading': {
         if (state.role === 'sensor') {
-          broadcast(raw.toString(), ws);
+          broadcastToMode(raw.toString(), 'full', ws);
+
+          const reading = msg.payload as LightReading | undefined;
+          const patternDetected = reading?.patternDetected ?? null;
+
+          if (typeof patternDetected === 'string' && patternDetected.length > 0) {
+            if (state.lastPatternDetected !== patternDetected) {
+              const patternMsg: WsMessage = {
+                type: 'pattern_detected',
+                payload: {
+                  timestamp: reading?.timestamp ?? Date.now(),
+                  patternDetected,
+                  patternScore: reading?.patternScore,
+                  sampleRateHz: reading?.sampleRateHz,
+                } satisfies PatternDetectedPayload,
+              };
+              broadcastToMode(JSON.stringify(patternMsg), 'pattern', ws);
+              state.lastPatternDetected = patternDetected;
+            }
+          } else {
+            state.lastPatternDetected = null;
+          }
         }
         break;
       }
@@ -180,5 +217,6 @@ httpServer.listen(PORT, () => {
   console.log(`Light Pattern Detector server  →  http://localhost:${PORT}`);
   console.log(`WebSocket endpoint             →  ws://localhost:${PORT}/ws`);
   console.log(`  • Connect as sensor:     { type:"identify", payload:{role:"sensor"} }`);
-  console.log(`  • Connect as subscriber: { type:"identify", payload:{role:"subscriber"} }`);
+  console.log(`  • Connect as full subscriber:    { type:"identify", payload:{role:"subscriber",mode:"full"} }`);
+  console.log(`  • Connect as pattern subscriber: { type:"identify", payload:{role:"subscriber",mode:"pattern"} }`);
 });

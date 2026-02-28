@@ -24,6 +24,7 @@ export interface RenderParams {
   audioBandpassQ:  number;
   effectiveHz:     number;
   sampleRateHistoryHz: number[];
+  deltaHistory: number[];
   threshold:       number;
   wsConnected:     boolean;
 }
@@ -43,6 +44,8 @@ const COLORS = {
 
 const WORDS_I: DictWord[] = ['I_O', 'I_P', 'I_OP', 'I_R'];
 const WORDS_II: DictWord[] = ['II_O', 'II_P', 'II_OP', 'II_R'];
+const HUD_SPARKLINE_SAMPLES = 152;
+const ALL_WORDS: DictWord[] = [...WORDS_I, ...WORDS_II];
 
 /**
  * Renderer
@@ -60,6 +63,12 @@ export class Renderer {
   private readonly specMaxHz = 3000;
   private specHistory: Uint8Array[] = [];
   private differenceImage: ImageData | null = null;
+  private readonly patternScoreHistory: Record<DictWord, number[]> = {
+    I_O: [], I_P: [], I_OP: [], I_R: [],
+    II_O: [], II_P: [], II_OP: [], II_R: [],
+  };
+  private readonly patternDetectionMarkers: number[] = [];
+  private lastDetectedPatternWord: DictWord | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -254,6 +263,11 @@ export class Renderer {
       this.drawRateSparkline(p.sampleRateHistoryHz, 78, hudTopPad + rateLineIdx * hudRowGap, panelW - 88, 12);
     }
 
+    const deltaLineIdx = lines.findIndex(([label]) => label.trim() === 'DELTA');
+    if (deltaLineIdx >= 0) {
+      this.drawDeltaSparkline(p.deltaHistory, p.threshold, 78, hudTopPad + deltaLineIdx * hudRowGap, panelW - 88, 12);
+    }
+
     lines.forEach(([label, value], i) => {
       const y = hudTopPad + i * hudRowGap;
       ctx.fillStyle = '#5a7a5a';
@@ -268,6 +282,8 @@ export class Renderer {
     ctx.restore();
 
     // ── Pattern confidence panel (bottom) ───────────────────────────────────
+    this.updatePatternScoreHistory(p.patternScores, p.patternMatch?.word ?? null);
+
     const botH = 156;
     ctx.save();
     ctx.fillStyle = COLORS.hudBg;
@@ -324,7 +340,7 @@ export class Renderer {
     drawGuide(40);
 
     if (history.length >= 2) {
-      const samples = history.length > w ? this.resampleToWidth(history, w) : history;
+      const samples = this.resampleToCount(history, HUD_SPARKLINE_SAMPLES);
 
       ctx.beginPath();
       for (let i = 0; i < samples.length; i++) {
@@ -343,13 +359,60 @@ export class Renderer {
     ctx.restore();
   }
 
-  private resampleToWidth(values: number[], width: number): number[] {
-    if (values.length <= width) return values;
+  private drawDeltaSparkline(history: number[], threshold: number, x: number, y: number, w: number, h: number): void {
+    if (w <= 4 || h <= 4) return;
+
+    const { ctx } = this;
+    const minDelta = -64;
+    const maxDelta = 128;
+    const range = maxDelta - minDelta;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.fillRect(x, y + 1, w, h);
+
+    const drawGuide = (value: number, color: string): void => {
+      const clamped = Math.max(minDelta, Math.min(maxDelta, value));
+      const gy = y + h - 1 - ((clamped - minDelta) / range) * (h - 2);
+      ctx.beginPath();
+      ctx.moveTo(x, gy);
+      ctx.lineTo(x + w, gy);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    };
+
+    drawGuide(0, 'rgba(160, 160, 160, 0.18)');
+    drawGuide(threshold, 'rgba(255, 136, 68, 0.38)');
+
+    if (history.length >= 2) {
+      const samples = this.resampleToCount(history, HUD_SPARKLINE_SAMPLES);
+
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i++) {
+        const v = Math.max(minDelta, Math.min(maxDelta, samples[i]));
+        const nx = samples.length <= 1 ? 0 : i / (samples.length - 1);
+        const px = x + nx * (w - 1);
+        const py = y + h - 1 - ((v - minDelta) / range) * (h - 2);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = 'rgba(255, 204, 0, 0.62)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  private resampleToCount(values: number[], count: number): number[] {
+    if (count <= 1) return values.slice(-1);
+    if (values.length <= count) return values;
 
     const out: number[] = [];
-    for (let x = 0; x < width; x++) {
-      const start = Math.floor((x * values.length) / width);
-      const end = Math.floor(((x + 1) * values.length) / width);
+    for (let x = 0; x < count; x++) {
+      const start = Math.floor((x * values.length) / count);
+      const end = Math.floor(((x + 1) * values.length) / count);
       let sum = 0;
       let count = 0;
       for (let i = start; i < Math.max(start + 1, end); i++) {
@@ -375,6 +438,16 @@ export class Renderer {
       const pct = Math.round(score * 100);
       const y = baseY + i * rowGap;
 
+      this.drawPatternConfidenceSparkline(
+        ctx,
+        this.patternScoreHistory[word],
+        this.patternDetectionMarkers,
+        x + 40,
+        y,
+        40,
+        12,
+      );
+
       ctx.fillStyle = p.patternMatch?.word === word ? COLORS.hudAccent : '#9fb3a0';
       ctx.fillText(word, x, y);
 
@@ -384,6 +457,72 @@ export class Renderer {
       ctx.fillStyle = COLORS.hudText;
       ctx.fillText(DICT_LABELS[word], x + 84, y);
     }
+  }
+
+  private drawPatternConfidenceSparkline(
+    ctx: CanvasRenderingContext2D,
+    history: number[],
+    markers: number[],
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): void {
+    if (w <= 4 || h <= 4) return;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.fillRect(x, y + 1, w, h);
+
+    if (history.length >= 2) {
+      const samples = this.resampleToCount(history, HUD_SPARKLINE_SAMPLES);
+      const markerSamples = this.resampleToCount(markers, HUD_SPARKLINE_SAMPLES);
+
+      for (let i = 0; i < markerSamples.length; i++) {
+        if (markerSamples[i] < 0.5) continue;
+        const nx = markerSamples.length <= 1 ? 0 : i / (markerSamples.length - 1);
+        const px = x + nx * (w - 1);
+        ctx.beginPath();
+        ctx.moveTo(px, y + 1);
+        ctx.lineTo(px, y + h - 1);
+        ctx.strokeStyle = 'rgba(255, 64, 64, 0.75)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i++) {
+        const v = Math.max(0, Math.min(1, samples[i]));
+        const nx = samples.length <= 1 ? 0 : i / (samples.length - 1);
+        const px = x + nx * (w - 1);
+        const py = y + h - 1 - v * (h - 2);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = 'rgba(255, 204, 0, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  private updatePatternScoreHistory(scores: Record<DictWord, number>, patternWord: DictWord | null): void {
+    for (const word of ALL_WORDS) {
+      const value = Math.max(0, Math.min(1, scores[word] ?? 0));
+      const history = this.patternScoreHistory[word];
+      history.push(value);
+      if (history.length > HUD_SPARKLINE_SAMPLES) {
+        history.splice(0, history.length - HUD_SPARKLINE_SAMPLES);
+      }
+    }
+
+    const event = patternWord !== null && patternWord !== this.lastDetectedPatternWord ? 1 : 0;
+    this.patternDetectionMarkers.push(event);
+    if (this.patternDetectionMarkers.length > HUD_SPARKLINE_SAMPLES) {
+      this.patternDetectionMarkers.splice(0, this.patternDetectionMarkers.length - HUD_SPARKLINE_SAMPLES);
+    }
+    this.lastDetectedPatternWord = patternWord;
   }
 
   private confidenceColor(score: number): string {

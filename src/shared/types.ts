@@ -31,6 +31,15 @@ export interface LightReading {
   zoneY: number;
   /** Current zone radius in pixels */
   zoneRadius: number;
+
+  /** Current detection packet frequency selected in the sensor UI (Hz). */
+  sampleRateHz?: number;
+
+  /** Last dictionary pattern detected by the matcher, or null when none matched. */
+  patternDetected?: string | null;
+
+  /** Confidence score (0–1) for patternDetected when available. */
+  patternScore?: number;
 }
 
 // ── Motion profile ────────────────────────────────────────────────────────────
@@ -87,13 +96,23 @@ export interface DetectorConfig {
 
 // ── WebSocket message protocol ───────────────────────────────────────────────
 
-export type WsMessageType = 'identify' | 'sensor_reading' | 'ping' | 'pong';
+export type WsMessageType = 'identify' | 'sensor_reading' | 'pattern_detected' | 'ping' | 'pong';
+
+export type SubscriberMode = 'full' | 'pattern';
 
 export interface IdentifyPayload {
   role: 'sensor' | 'subscriber';
+  mode?: SubscriberMode;
+}
+
+export interface PatternDetectedPayload {
+  timestamp: number;
+  patternDetected: string;
+  patternScore?: number;
+  sampleRateHz?: number;
 }
 
 export interface WsMessage {
   type: WsMessageType;
-  payload?: LightReading | IdentifyPayload | Record<string, unknown>;
+  payload?: LightReading | IdentifyPayload | PatternDetectedPayload | Record<string, unknown>;
 }

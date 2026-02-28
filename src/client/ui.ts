@@ -14,6 +14,7 @@ export interface AppConfig {
   audioThreshold:  number;   // audio delta threshold (0–255)
   audioBandpassCenter: number; // audio detector bandpass center frequency (Hz)
   audioBandpassQ:      number; // audio detector bandpass Q
+  patternMatchThreshold: number; // pattern matcher acceptance threshold (0–1)
   viewMode:        ViewMode; // 'live' | 'background' | 'difference'
   backgroundAlpha: number;   // EMA learning rate (0–1)
   morseUnitMs:     number;   // Morse unit duration in ms
@@ -33,12 +34,13 @@ export interface AppConfig {
 export class UI {
   readonly config: AppConfig = {
     detectorMode:    'light',
-    sampleRateHz:    40,
+    sampleRateHz:    20,
     grayscaleProcessing: true,
     threshold:       30,
     audioThreshold:  20,
     audioBandpassCenter: AUDIO_BANDPASS_DEFAULT_CENTER,
     audioBandpassQ:      AUDIO_BANDPASS_DEFAULT_Q,
+    patternMatchThreshold: 0.875,
     viewMode:        'live',
     backgroundAlpha: 0.03,
     morseUnitMs:     100,
@@ -88,6 +90,9 @@ export class UI {
 
     this.slider('audio-bp-q', 0.2, 20, 0.1, this.config.audioBandpassQ,
       v => { this.config.audioBandpassQ = v; });
+
+    this.slider('pattern-threshold', 0.7, 0.98, 0.005, this.config.patternMatchThreshold,
+      v => { this.config.patternMatchThreshold = v; });
 
     // ── View mode ────────────────────────────────────────────────────────────
     this.select('view-mode', v => {

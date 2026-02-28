@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pattern Comparison Demo</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1116;
+      --panel: #171d27;
+      --border: #2a3442;
+      --text: #dbe4f0;
+      --muted: #95a6bc;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --bit-on: #facc15;
+      --bit-off: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Segoe UI, system-ui, sans-serif;
+      padding: 18px;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 10px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .label { color: var(--muted); font-size: 12px; }
+    .mono { font-family: Consolas, Monaco, monospace; }
+    .controls { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 10px; }
+    .ctrl { display: grid; gap: 4px; }
+    select, input[type="range"], button {
+      background: #111827;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    .bits { display: grid; grid-template-columns: repeat(40, minmax(0, 1fr)); gap: 2px; }
+    .bit { height: 10px; border-radius: 2px; background: var(--bit-off); }
+    .bit.on { background: var(--bit-on); }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 8px; }
+    .stat { background: #0f1520; border: 1px solid #222c39; border-radius: 8px; padding: 8px; }
+    canvas { width: 100%; height: 110px; display: block; background: #0e141d; border: 1px solid #222c39; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    td { padding: 3px 6px; font-size: 11px; }
+    td.score { width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+    td.word { width: 56px; }
+    td.label { width: 180px; }
+    tr + tr td { border-top: 1px solid #233042; }
+    .bar-wrap { background: #111927; border-radius: 6px; height: 10px; overflow: hidden; }
+    .bar { height: 100%; background: linear-gradient(90deg, #2563eb, #22d3ee); }
+    .note { line-height: 1.5; color: var(--muted); font-size: 13px; }
+    .badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; }
+    .badge.ok { color: var(--ok); border-color: rgba(34,197,94,.5); }
+    .badge.warn { color: var(--warn); border-color: rgba(245,158,11,.5); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <h2 style="margin:0;">Pattern Comparison Demo (Async)</h2>
+      <a href="/" style="color:var(--accent)">Sensor</a>
+      <a href="/flash" style="color:var(--accent)">Transmitter</a>
+      <a href="/demo" style="color:var(--accent)">WS Demo</a>
+    </div>
+
+    <div class="card note">
+      This demo generates an incoming binary stream and compares the latest 40-sample window against all dictionary words every sample.
+      Because transmission is asynchronous, windows overlap heavily. Raw threshold hits can fire many times around one event.
+      The chart shows <span class="mono">top score</span>, <span class="mono">raw triggers</span> (red), and <span class="mono">edge triggers</span> (green).
+    </div>
+
+    <div class="card controls">
+      <div class="ctrl">
+        <label class="label" for="tx-word">Generated word</label>
+        <select id="tx-word"></select>
+      </div>
+      <div class="ctrl">
+        <label class="label" for="phase">Initial phase offset: <span id="phase-val">0</span></label>
+        <input id="phase" type="range" min="0" max="39" step="1" value="0" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="noise">Bit flip noise: <span id="noise-val">0%</span></label>
+        <input id="noise" type="range" min="0" max="30" step="1" value="0" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="thr">Match threshold: <span id="thr-val">0.875</span></label>
+        <input id="thr" type="range" min="0.70" max="0.98" step="0.005" value="0.875" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="hz">Generator rate (samples/s): <span id="hz-val">20</span></label>
+        <input id="hz" type="range" min="1" max="40" step="1" value="20" />
+      </div>
+      <div class="row" style="align-self:end;">
+        <button id="btn-run">Pause</button>
+        <button id="btn-reset">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Dictionary word bits (40 TX samples)</div>
+      <div id="dict-bits" class="bits" style="margin-top:6px"></div>
+      <div class="label" style="margin-top:8px">Incoming latest 40-sample window</div>
+      <div id="in-bits" class="bits" style="margin-top:6px"></div>
+    </div>
+
+    <div class="card stats">
+      <div class="stat"><div class="label">Top word</div><div id="top-word">—</div></div>
+      <div class="stat"><div class="label">Top score</div><div id="top-score">—</div></div>
+      <div class="stat"><div class="label">2nd score</div><div id="second-score">—</div></div>
+      <div class="stat"><div class="label">Margin</div><div id="margin">—</div></div>
+    </div>
+
+    <div class="card">
+      <canvas id="chart" width="1000" height="110"></canvas>
+      <div class="row" style="margin-top:6px;">
+        <span class="badge warn">red = raw trigger (score ≥ threshold)</span>
+        <span class="badge ok">green = edge trigger (false→true transition)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <table id="score-table"></table>
+    </div>
+  </div>
+
+  <script type="module" src="/src/client/patternDemo.ts"></script>
+</body>
+</html>

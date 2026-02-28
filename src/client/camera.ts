@@ -182,5 +182,6 @@ export class CameraManager {
   stop(): void {
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    this.currentDeviceId = null;
   }
 }
