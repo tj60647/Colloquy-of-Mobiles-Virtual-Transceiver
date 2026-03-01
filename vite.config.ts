@@ -16,6 +16,7 @@ export default defineConfig({
           if (req.url === '/demo') req.url = '/demo.html';
           if (req.url === '/pattern-demo') req.url = '/pattern-demo.html';
           if (req.url === '/background-stats-demo') req.url = '/background-stats-demo.html';
+          if (req.url === '/audio-background-stats-demo') req.url = '/audio-background-stats-demo.html';
           next();
         });
       },
@@ -40,6 +41,7 @@ export default defineConfig({
         demo:  resolve(__dirname, 'demo.html'),
         patternDemo: resolve(__dirname, 'pattern-demo.html'),
         backgroundStatsDemo: resolve(__dirname, 'background-stats-demo.html'),
+        audioBackgroundStatsDemo: resolve(__dirname, 'audio-background-stats-demo.html'),
       },
     },
   },

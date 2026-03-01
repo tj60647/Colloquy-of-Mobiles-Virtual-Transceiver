@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audio Background vs Sensor Demo</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1116;
+      --panel: #171d27;
+      --border: #2a3442;
+      --text: #dbe4f0;
+      --muted: #95a6bc;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Segoe UI, system-ui, sans-serif;
+      padding: 18px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; display: grid; gap: 10px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .label { color: var(--muted); font-size: 12px; }
+    .panel-title {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      margin-bottom: 8px;
+    }
+    .mono { font-family: Consolas, Monaco, monospace; }
+    .controls { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
+    .controls .panel-title { grid-column: 1 / -1; margin-bottom: 0; }
+    .ctrl { display: grid; gap: 4px; }
+    .tick-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1;
+      font-family: Consolas, Monaco, monospace;
+      padding: 0 2px;
+    }
+    select, input[type="range"], button {
+      background: #111827;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+
+    .audio-panel { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 10px; align-items: start; }
+    .spectrum-wrap { width: 100%; max-width: 280px; }
+    .spectrogram {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #0b1018;
+      border: 1px solid #222c39;
+      border-radius: 8px;
+      display: block;
+    }
+    .audio-meta { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .audio-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+    .stats { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 8px; }
+    .stat { background: #0f1520; border: 1px solid #222c39; border-radius: 8px; padding: 8px; }
+    .v { font-family: Consolas, Monaco, monospace; font-size: 14px; }
+    .v.ok { color: var(--ok); }
+    .v.warn { color: var(--warn); }
+    .v.bad { color: var(--bad); }
+
+    canvas.graph {
+      width: 100%;
+      height: 80px;
+      display: block;
+      background: #0e141d;
+      border: 1px solid #222c39;
+      border-radius: 8px;
+    }
+    .legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    .badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; }
+    .badge.sensor { color: #a5b4fc; border-color: rgba(165,180,252,.5); }
+    .badge.side { color: #94a3b8; border-color: rgba(148,163,184,.5); }
+    .badge.mean { color: #22d3ee; border-color: rgba(34,211,238,.5); }
+    .badge.std { color: #94a3b8; border-color: rgba(148,163,184,.5); }
+    .badge.std2 { color: #64748b; border-color: rgba(100,116,139,.5); }
+    .badge.z { color: #f59e0b; border-color: rgba(245,158,11,.5); }
+    .badge.thr { color: #ef4444; border-color: rgba(239,68,68,.5); }
+
+    @media (max-width: 860px) {
+      .audio-panel { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <h2 style="margin:0;">Audio Background vs Sensor Demo</h2>
+      <a href="/" style="color:var(--accent)">Sensor</a>
+      <a href="/flash" style="color:var(--accent)">Transmitter</a>
+      <a href="/background-stats-demo" style="color:var(--accent)">Camera Background Demo</a>
+    </div>
+
+    <div class="card" style="line-height:1.5; color:var(--muted); font-size:13px;">
+      Uses microphone spectrum energy around a selected band (bounded to transmitter tone range).
+      Each sample tick updates rolling <span class="mono">mean</span>, <span class="mono">stddev</span>, and
+      hybrid detection with <span class="mono">z-threshold + delta floor</span>.
+    </div>
+
+    <div class="card controls">
+      <div class="panel-title">Configuration</div>
+      <div class="ctrl">
+        <label class="label" for="hz">Sample rate (Hz): <span id="hz-val">20</span></label>
+        <input id="hz" type="range" min="1" max="40" step="1" value="20" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="window">Window size (samples): <span id="window-val">200</span></label>
+        <input id="window" type="range" min="8" max="200" step="1" value="200" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="z-thr">Z threshold: <span id="z-thr-val">2.00</span></label>
+        <input id="z-thr" type="range" min="0.5" max="4" step="0.05" value="2.0" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="sigma-floor">Sigma floor: <span id="sigma-floor-val">4.0</span></label>
+        <input id="sigma-floor" type="range" min="0" max="20" step="0.5" value="4.0" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="delta-floor">Delta floor: <span id="delta-floor-val">15</span></label>
+        <input id="delta-floor" type="range" min="0" max="80" step="1" value="15" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="side-ratio-floor">Center/side ratio floor: <span id="side-ratio-floor-val">1.80</span></label>
+        <input id="side-ratio-floor" type="range" min="1" max="6" step="0.05" value="1.8" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="freeze-bg-on-event">Freeze background on event</label>
+        <input id="freeze-bg-on-event" type="checkbox" checked />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="center-freq">Center frequency: <span id="center-freq-val">2093</span> Hz</label>
+        <input id="center-freq" type="range" min="0" max="4" step="1" value="2" list="center-freq-ticks" />
+        <datalist id="center-freq-ticks">
+          <option value="0" label="1760"></option>
+          <option value="1" label="1976"></option>
+          <option value="2" label="2093"></option>
+          <option value="3" label="2349"></option>
+          <option value="4" label="2637"></option>
+        </datalist>
+        <div class="tick-row" aria-hidden="true">
+          <span>1760</span><span>1976</span><span>2093</span><span>2349</span><span>2637</span>
+        </div>
+      </div>
+      <div class="ctrl">
+        <label class="label" for="bandwidth">Bandwidth: <span id="bandwidth-val">200</span> Hz</label>
+        <input id="bandwidth" type="range" min="20" max="1200" step="5" value="200" />
+      </div>
+    </div>
+
+    <div class="card audio-panel">
+      <div class="panel-title" style="grid-column:1/-1; margin-bottom:2px;">Audio Source</div>
+      <div class="spectrum-wrap">
+        <canvas id="spectrogram" class="spectrogram" width="320" height="240"></canvas>
+      </div>
+      <div class="audio-meta">
+        <div><strong style="color:var(--text);">Microphone status</strong></div>
+        <div id="audio-status">Initializing…</div>
+        <div class="audio-actions">
+          <button id="btn-run">Pause</button>
+          <button id="btn-reset">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card stats">
+      <div class="panel-title" style="grid-column:1/-1; margin-bottom:0;">Current Tick Metrics</div>
+      <div class="stat"><div class="label">Sample</div><div id="sample-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Background mean</div><div id="mean-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Stddev</div><div id="std-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Max (window)</div><div id="max-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Z-score</div><div id="z-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Z event</div><div id="event-now" class="v">—</div></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Center vs side energy</div>
+      <canvas id="signal-chart" class="graph" width="1000" height="80"></canvas>
+      <div class="legend">
+        <span class="badge sensor">center band</span>
+        <span class="badge side">side mean</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Z-score over time</div>
+      <canvas id="z-chart" class="graph" width="1000" height="80"></canvas>
+      <div class="legend">
+        <span class="badge z">z-score</span>
+        <span class="badge thr">±z threshold</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Signal detected - positive z-threshold exceeded</div>
+      <canvas id="z-pos-event-chart" class="graph" width="1000" height="80"></canvas>
+      <div class="legend">
+        <span class="badge thr">positive z-threshold exceeded</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/client/audioBackgroundStatsDemo.ts"></script>
+</body>
+</html>
