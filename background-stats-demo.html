@@ -63,7 +63,7 @@
     .v.bad { color: var(--bad); }
     canvas {
       width: 100%;
-      height: 170px;
+      height: 80px;
       display: block;
       background: #0e141d;
       border: 1px solid #222c39;
@@ -74,6 +74,7 @@
     .badge.sensor { color: #a5b4fc; border-color: rgba(165,180,252,.5); }
     .badge.mean { color: #22d3ee; border-color: rgba(34,211,238,.5); }
     .badge.std { color: #94a3b8; border-color: rgba(148,163,184,.5); }
+    .badge.std2 { color: #64748b; border-color: rgba(100,116,139,.5); }
     .badge.z { color: #f59e0b; border-color: rgba(245,158,11,.5); }
     .badge.thr { color: #ef4444; border-color: rgba(239,68,68,.5); }
     .note { line-height: 1.5; color: var(--muted); font-size: 13px; }
@@ -97,36 +98,19 @@
       top: 50%;
       width: 14px;
       height: 14px;
+      aspect-ratio: 1 / 1;
       transform: translate(-50%, -50%);
       border: 2px solid rgba(34, 211, 238, 0.95);
-      border-radius: 3px;
-      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65), 0 0 10px rgba(34, 211, 238, 0.45);
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.75);
       pointer-events: none;
-    }
-    .sample-zone::before,
-    .sample-zone::after {
-      content: '';
-      position: absolute;
-      background: rgba(34, 211, 238, 0.9);
-    }
-    .sample-zone::before {
-      left: 50%;
-      top: -6px;
-      width: 1px;
-      height: 24px;
-      transform: translateX(-50%);
-    }
-    .sample-zone::after {
-      top: 50%;
-      left: -6px;
-      width: 24px;
-      height: 1px;
-      transform: translateY(-50%);
+      background: rgb(127, 127, 127);
+      will-change: left, width, height, background-color;
     }
     .camera-meta { font-size: 12px; color: var(--muted); line-height: 1.6; }
     .camera-controls {
       display: grid;
-      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      grid-template-columns: repeat(3, minmax(180px, 1fr));
       gap: 8px;
       margin-top: 8px;
     }
@@ -147,7 +131,7 @@
     </div>
 
     <div class="card note">
-      Uses a single-pixel sensor stream (camera by default) and compares each incoming sample against a rolling background model.
+      Uses a camera/simulated sensor stream and compares each incoming sample against a rolling background model.
       Every sample tick updates rolling <span class="mono">mean</span>, <span class="mono">stddev</span>, and
       <span class="mono">z-score = (sample - mean) / stddev</span>.
     </div>
@@ -166,12 +150,12 @@
         <input id="hz" type="range" min="1" max="40" step="1" value="20" />
       </div>
       <div class="ctrl">
-        <label class="label" for="window">Window size (samples): <span id="window-val">40</span></label>
-        <input id="window" type="range" min="8" max="120" step="1" value="40" />
+        <label class="label" for="window">Window size (samples): <span id="window-val">200</span></label>
+        <input id="window" type="range" min="8" max="200" step="1" value="200" />
       </div>
       <div class="ctrl">
-        <label class="label" for="z-thr">Z threshold: <span id="z-thr-val">1.50</span></label>
-        <input id="z-thr" type="range" min="0.5" max="4" step="0.05" value="1.5" />
+        <label class="label" for="z-thr">Z threshold: <span id="z-thr-val">2.00</span></label>
+        <input id="z-thr" type="range" min="0.5" max="4" step="0.05" value="2.0" />
       </div>
 
       <div class="ctrl sim-only">
@@ -207,25 +191,42 @@
         <div><strong style="color:var(--text);">Camera source status</strong></div>
         <div id="camera-status">Simulated source active.</div>
         <div style="margin-top:6px;">
-          In camera mode, each sample tick reads current frame luminance at the
-          highlighted sampling zone and feeds it into rolling mean/stddev/z-score stats.
+          In camera mode, each sample tick averages frame luminance across the highlighted
+          circular sample diameter and feeds it into rolling mean/stddev/z-score stats.
         </div>
+        <div id="camera-params" style="margin-top:6px; color:var(--text);"></div>
         <div class="camera-controls">
           <div class="ctrl">
-            <label class="label" for="sample-x-range-min">X range min: <span id="sample-x-range-min-val">-20</span>%</label>
-            <input id="sample-x-range-min" type="range" min="-45" max="0" step="1" value="-20" />
+            <label class="label" for="sample-x-range-min">X range min: <span id="sample-x-range-min-val">-40</span>°</label>
+            <input id="sample-x-range-min" type="range" min="-90" max="0" step="0.5" value="-40" />
           </div>
           <div class="ctrl">
-            <label class="label" for="sample-x-range-max">X range max: <span id="sample-x-range-max-val">20</span>%</label>
-            <input id="sample-x-range-max" type="range" min="0" max="45" step="1" value="20" />
+            <label class="label" for="sample-x-range-max">X range max: <span id="sample-x-range-max-val">40</span>°</label>
+            <input id="sample-x-range-max" type="range" min="0" max="90" step="0.5" value="40" />
           </div>
           <div class="ctrl">
-            <label class="label" for="sample-x-max-vel">X max vel: <span id="sample-x-max-vel-val">30</span> %/s</label>
-            <input id="sample-x-max-vel" type="range" min="0" max="180" step="1" value="30" />
+            <label class="label" for="sample-x-max-vel">X max vel: <span id="sample-x-max-vel-val">5</span> °/s</label>
+            <input id="sample-x-max-vel" type="range" min="0" max="180" step="0.5" value="5" />
           </div>
           <div class="ctrl">
-            <label class="label" for="sample-x-max-acc">X max acc: <span id="sample-x-max-acc-val">60</span> %/s²</label>
-            <input id="sample-x-max-acc" type="range" min="0" max="360" step="1" value="60" />
+            <label class="label" for="sample-x-max-acc">X max acc: <span id="sample-x-max-acc-val">5</span> °/s²</label>
+            <input id="sample-x-max-acc" type="range" min="0" max="360" step="0.5" value="5" />
+          </div>
+          <div class="ctrl">
+            <label class="label" for="camera-h-fov">Camera H-FoV: <span id="camera-h-fov-val">90</span>°</label>
+            <input id="camera-h-fov" type="range" min="20" max="140" step="0.5" value="90" />
+          </div>
+          <div class="ctrl">
+            <label class="label" for="sample-diameter">Sample diameter: <span id="sample-diameter-val">12.5</span>°</label>
+            <input id="sample-diameter" type="range" min="0.5" max="60" step="0.5" value="12.5" />
+          </div>
+          <div class="ctrl">
+            <label class="label" for="camera-grayscale">Grayscale processing</label>
+            <input id="camera-grayscale" type="checkbox" checked />
+          </div>
+          <div class="ctrl">
+            <label class="label" for="camera-exposure">Exposure time: <span id="camera-exposure-val">0</span> µs <span id="camera-exposure-availability"></span></label>
+            <input id="camera-exposure" type="range" min="0" max="1" step="0.0001" value="0" disabled />
           </div>
         </div>
         <div class="camera-actions">
@@ -247,20 +248,29 @@
 
     <div class="card">
       <div class="label">Signal vs background</div>
-      <canvas id="signal-chart" width="1000" height="170"></canvas>
+      <canvas id="signal-chart" width="1000" height="80"></canvas>
       <div class="legend">
         <span class="badge sensor">sensor sample</span>
         <span class="badge mean">rolling mean</span>
+        <span class="badge std2">±2 stddev band</span>
         <span class="badge std">±1 stddev band</span>
       </div>
     </div>
 
     <div class="card">
       <div class="label">Z-score over time</div>
-      <canvas id="z-chart" width="1000" height="170"></canvas>
+      <canvas id="z-chart" width="1000" height="80"></canvas>
       <div class="legend">
         <span class="badge z">z-score</span>
         <span class="badge thr">±z threshold</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Signal detected - positive z-threshold exceeded</div>
+      <canvas id="z-pos-event-chart" width="1000" height="80"></canvas>
+      <div class="legend">
+        <span class="badge thr">positive z-threshold exceeded</span>
       </div>
     </div>
   </div>
