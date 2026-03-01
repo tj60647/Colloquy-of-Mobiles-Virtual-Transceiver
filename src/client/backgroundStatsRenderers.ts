@@ -5,6 +5,7 @@ export interface MetricsSnapshot {
   max: number;
   z: number;
   zThreshold: number;
+  eventDetected: boolean;
 }
 
 export interface SignalChartSnapshot {
@@ -25,8 +26,7 @@ export interface ZChartSnapshot {
 }
 
 export interface PositiveZEventChartSnapshot {
-  zHistory: number[];
-  zThreshold: number;
+  eventHistory: boolean[];
   hz: number;
   tickIndex: number;
 }
@@ -81,7 +81,7 @@ export class MetricsPanelRenderer {
     this.maxNowEl.textContent = snapshot.max.toFixed(1);
     this.zNowEl.textContent = snapshot.z.toFixed(2);
 
-    const event = Math.abs(snapshot.z) >= snapshot.zThreshold;
+    const event = snapshot.eventDetected;
     this.eventNowEl.textContent = event ? 'YES' : 'no';
     this.eventNowEl.className = `v ${event ? 'bad' : 'ok'}`;
     this.zNowEl.className = `v ${event ? 'warn' : ''}`;
@@ -302,18 +302,18 @@ export class PositiveZEventChartRenderer extends CanvasSeriesRenderer {
     const h = this.canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    this.drawSampleGrid(ctx, w, h, snapshot.zHistory.length);
-    this.drawSecondGrid(ctx, w, h, snapshot.zHistory.length, snapshot.hz, snapshot.tickIndex);
+    this.drawSampleGrid(ctx, w, h, snapshot.eventHistory.length);
+    this.drawSecondGrid(ctx, w, h, snapshot.eventHistory.length, snapshot.hz, snapshot.tickIndex);
 
-    if (snapshot.zHistory.length === 0) return;
+    if (snapshot.eventHistory.length === 0) return;
 
-    const points = snapshot.zHistory.length;
+    const points = snapshot.eventHistory.length;
     const stepW = points > 1 ? (w - 1) / (points - 1) : w;
 
     ctx.save();
     ctx.fillStyle = 'rgba(239, 68, 68, 0.72)';
     for (let i = 0; i < points; i++) {
-      if (snapshot.zHistory[i] < snapshot.zThreshold) continue;
+      if (!snapshot.eventHistory[i]) continue;
       const x = i * stepW;
       const barW = Math.max(1, stepW * 0.85);
       ctx.fillRect(x - (barW / 2), 0, barW, h - 1);

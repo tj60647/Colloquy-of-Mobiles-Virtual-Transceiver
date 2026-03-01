@@ -27,6 +27,11 @@ const windowEl = document.getElementById('window') as HTMLInputElement;
 const windowValEl = document.getElementById('window-val') as HTMLSpanElement;
 const zThrEl = document.getElementById('z-thr') as HTMLInputElement;
 const zThrValEl = document.getElementById('z-thr-val') as HTMLSpanElement;
+const sigmaFloorEl = document.getElementById('sigma-floor') as HTMLInputElement;
+const sigmaFloorValEl = document.getElementById('sigma-floor-val') as HTMLSpanElement;
+const deltaFloorEl = document.getElementById('delta-floor') as HTMLInputElement;
+const deltaFloorValEl = document.getElementById('delta-floor-val') as HTMLSpanElement;
+const freezeBgOnEventEl = document.getElementById('freeze-bg-on-event') as HTMLInputElement;
 const baselineEl = document.getElementById('baseline') as HTMLInputElement;
 const baselineValEl = document.getElementById('baseline-val') as HTMLSpanElement;
 const noiseEl = document.getElementById('noise') as HTMLInputElement;
@@ -70,6 +75,11 @@ const eventNowEl = document.getElementById('event-now') as HTMLDivElement;
 const signalChartEl = document.getElementById('signal-chart') as HTMLCanvasElement;
 const zChartEl = document.getElementById('z-chart') as HTMLCanvasElement;
 const zPosEventChartEl = document.getElementById('z-pos-event-chart') as HTMLCanvasElement;
+const helpModalBackdropEl = document.getElementById('help-modal-backdrop') as HTMLDivElement;
+const helpModalEl = document.getElementById('help-modal') as HTMLDivElement;
+const helpModalTitleEl = document.getElementById('help-modal-title') as HTMLHeadingElement;
+const helpModalBodyEl = document.getElementById('help-modal-body') as HTMLParagraphElement;
+const helpModalCloseEl = document.getElementById('help-modal-close') as HTMLButtonElement;
 
 const videoPreviewRenderer = new VideoPreviewRenderer(sampleZoneEl);
 const metricsRenderer = new MetricsPanelRenderer(
@@ -88,6 +98,9 @@ let source: SampleSourceMode = 'camera';
 let hz = 20;
 let windowSize = 200;
 let zThreshold = 2.0;
+let sigmaFloor = 4.0;
+let deltaFloor = 15;
+let freezeBackgroundOnEvent = true;
 let cameraHFov = 90;
 let sampleDiameterDeg = 12.5;
 let grayscaleEnabled = true;
@@ -122,6 +135,7 @@ const meanHistory: number[] = [];
 const upperHistory: number[] = [];
 const lowerHistory: number[] = [];
 const zHistory: number[] = [];
+const eventHistory: boolean[] = [];
 
 const movingSource = new MovingSampleSource(cameraPreviewEl, motionConfig, simulatedConfig);
 const orchestrator = new TickOrchestrator(hz, {
@@ -133,6 +147,128 @@ const orchestrator = new TickOrchestrator(hz, {
     runTick();
   },
 });
+
+const sliderHelpText: Record<string, { title: string; body: string }> = {
+  hz: {
+    title: 'Sample rate (Hz)',
+    body: 'How often the detector samples luminance each second. Higher values react faster but may increase noise sensitivity.',
+  },
+  window: {
+    title: 'Window size (samples)',
+    body: 'How many recent samples are used for rolling mean/stddev. Larger windows are steadier; smaller windows adapt faster.',
+  },
+  'z-thr': {
+    title: 'Z threshold',
+    body: 'Minimum z-score required for a potential event after sigma-floor normalization.',
+  },
+  'sigma-floor': {
+    title: 'Sigma floor',
+    body: 'Lower bound for stddev in z-score math: z = (sample - mean) / max(stddev, sigmaFloor). Prevents over-triggering in very dark/quiet scenes.',
+  },
+  'delta-floor': {
+    title: 'Delta floor',
+    body: 'Absolute minimum brightness jump (sample - mean) required to count as event. Helps ignore tiny variations that are statistically large but visually dark.',
+  },
+  baseline: {
+    title: 'Baseline',
+    body: 'Simulated mode: base luminance level around which synthetic signal varies.',
+  },
+  noise: {
+    title: 'Noise stddev',
+    body: 'Simulated mode: random fluctuation strength around baseline.',
+  },
+  drift: {
+    title: 'Slow drift amp',
+    body: 'Simulated mode: low-frequency brightness drift amplitude.',
+  },
+  'pulse-amp': {
+    title: 'Pulse amplitude',
+    body: 'Simulated mode: additional brightness added during pulse events.',
+  },
+  'pulse-every': {
+    title: 'Pulse every N ticks',
+    body: 'Simulated mode: pulse repeat interval in sample ticks.',
+  },
+  'sample-x-range-min': {
+    title: 'X range min (°)',
+    body: 'Leftmost sweep angle for camera sampling point relative to optical center.',
+  },
+  'sample-x-range-max': {
+    title: 'X range max (°)',
+    body: 'Rightmost sweep angle for camera sampling point relative to optical center.',
+  },
+  'sample-x-max-vel': {
+    title: 'X max vel (°/s)',
+    body: 'Maximum horizontal sweep speed of the sample point.',
+  },
+  'sample-x-max-acc': {
+    title: 'X max acc (°/s²)',
+    body: 'Maximum horizontal sweep acceleration/deceleration.',
+  },
+  'camera-h-fov': {
+    title: 'Camera H-FoV (°)',
+    body: 'Horizontal field-of-view used to map angle controls to frame position when camera metadata is missing or overridden.',
+  },
+  'sample-diameter': {
+    title: 'Sample diameter (°)',
+    body: 'Angular diameter of the circular region averaged for each sample. Larger values smooth local noise and spatial flicker.',
+  },
+  'camera-exposure': {
+    title: 'Exposure time (µs)',
+    body: 'Approximate shutter-open duration from camera controls when supported by browser/device. Longer exposure increases brightness and motion blur.',
+  },
+};
+
+function openHelpModal(title: string, body: string): void {
+  helpModalTitleEl.textContent = title;
+  helpModalBodyEl.textContent = body;
+  helpModalBackdropEl.classList.add('visible');
+  helpModalBackdropEl.setAttribute('aria-hidden', 'false');
+}
+
+function closeHelpModal(): void {
+  helpModalBackdropEl.classList.remove('visible');
+  helpModalBackdropEl.setAttribute('aria-hidden', 'true');
+}
+
+function initSliderHelp(): void {
+  for (const [id, help] of Object.entries(sliderHelpText)) {
+    const input = document.getElementById(id) as HTMLInputElement | null;
+    if (!input || input.type !== 'range') continue;
+
+    const label = document.querySelector(`label[for="${id}"]`) as HTMLLabelElement | null;
+    if (!label) continue;
+    if (label.parentElement?.querySelector('.info-btn')) continue;
+
+    const row = document.createElement('div');
+    row.className = 'label-row';
+    label.parentElement?.insertBefore(row, label);
+    row.appendChild(label);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'info-btn';
+    btn.textContent = 'i';
+    btn.setAttribute('aria-label', `Info: ${help.title}`);
+    btn.addEventListener('click', () => {
+      openHelpModal(help.title, help.body);
+    });
+    row.appendChild(btn);
+  }
+
+  helpModalCloseEl.addEventListener('click', closeHelpModal);
+  helpModalBackdropEl.addEventListener('click', (event) => {
+    if (event.target === helpModalBackdropEl) closeHelpModal();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && helpModalBackdropEl.classList.contains('visible')) {
+      closeHelpModal();
+    }
+  });
+  helpModalEl.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+}
 
 function setCameraStatus(msg: string): void {
   cameraStatusEl.textContent = msg;
@@ -150,6 +286,9 @@ function applyControlValues(): void {
   hz = parseInt(hzEl.value, 10);
   windowSize = parseInt(windowEl.value, 10);
   zThreshold = parseFloat(zThrEl.value);
+  sigmaFloor = parseFloat(sigmaFloorEl.value);
+  deltaFloor = parseInt(deltaFloorEl.value, 10);
+  freezeBackgroundOnEvent = freezeBgOnEventEl.checked;
 
   const rangeMin = parseFloat(sampleXRangeMinEl.value);
   const rangeMax = parseFloat(sampleXRangeMaxEl.value);
@@ -176,6 +315,8 @@ function applyControlValues(): void {
   hzValEl.textContent = String(hz);
   windowValEl.textContent = String(windowSize);
   zThrValEl.textContent = zThreshold.toFixed(2);
+  sigmaFloorValEl.textContent = sigmaFloor.toFixed(1);
+  deltaFloorValEl.textContent = String(deltaFloor);
 
   baselineValEl.textContent = String(simulatedConfig.baseline);
   noiseValEl.textContent = String(simulatedConfig.noiseStd);
@@ -257,8 +398,31 @@ function pushHistory(arr: number[], value: number): void {
   if (arr.length > HISTORY) arr.splice(0, arr.length - HISTORY);
 }
 
-function renderAll(sample: number, mean: number, stddev: number, max: number, z: number): void {
-  metricsRenderer.render({ sample, mean, stddev, max, z, zThreshold });
+function detectEvent(sample: number, mean: number, stddev: number): { z: number; event: boolean } {
+  const stdEff = Math.max(sigmaFloor, stddev);
+  const delta = sample - mean;
+  const z = stdEff > 1e-6 ? (delta / stdEff) : 0;
+  const event = z >= zThreshold && delta >= deltaFloor;
+  return { z, event };
+}
+
+function recomputeDerivedHistories(): void {
+  zHistory.length = 0;
+  eventHistory.length = 0;
+
+  const n = Math.min(sampleHistory.length, meanHistory.length, upperHistory.length);
+  for (let i = 0; i < n; i++) {
+    const sample = sampleHistory[i];
+    const mean = meanHistory[i];
+    const stddev = Math.max(0, upperHistory[i] - mean);
+    const { z, event } = detectEvent(sample, mean, stddev);
+    zHistory.push(z);
+    eventHistory.push(event);
+  }
+}
+
+function renderAll(sample: number, mean: number, stddev: number, max: number, z: number, eventDetected: boolean): void {
+  metricsRenderer.render({ sample, mean, stddev, max, z, zThreshold, eventDetected });
   signalChartRenderer.render({
     sampleHistory,
     meanHistory,
@@ -275,8 +439,7 @@ function renderAll(sample: number, mean: number, stddev: number, max: number, z:
     tickIndex,
   });
   zPosEventChartRenderer.render({
-    zHistory,
-    zThreshold,
+    eventHistory,
     hz,
     tickIndex,
   });
@@ -292,11 +455,12 @@ function rebuildStatsBufferFromHistory(): void {
 }
 
 function refreshRenderFromCurrentState(): void {
+  recomputeDerivedHistories();
   const latestSample = sampleHistory[sampleHistory.length - 1] ?? movingSource.getLastSample();
   const stats = statsBuffer.snapshot();
-  const z = stats.stddev > 1e-6 ? (latestSample - stats.mean) / stats.stddev : 0;
+  const { z, event } = detectEvent(latestSample, stats.mean, stats.stddev);
   latestRollingMean = stats.mean;
-  renderAll(latestSample, stats.mean, stats.stddev, stats.max, z);
+  renderAll(latestSample, stats.mean, stats.stddev, stats.max, z, event);
   updateSampleZoneMarker();
 }
 
@@ -313,17 +477,19 @@ function resetState(): void {
   upperHistory.length = 0;
   lowerHistory.length = 0;
   zHistory.length = 0;
+  eventHistory.length = 0;
 
   for (let i = 0; i < windowSize; i++) {
     const sample = movingSource.sample(tickIndex);
     const stats = statsBuffer.push(sample);
-    const z = stats.stddev > 1e-6 ? (sample - stats.mean) / stats.stddev : 0;
+    const { z, event } = detectEvent(sample, stats.mean, stats.stddev);
 
     pushHistory(sampleHistory, sample);
     pushHistory(meanHistory, stats.mean);
     pushHistory(upperHistory, stats.mean + stats.stddev);
     pushHistory(lowerHistory, stats.mean - stats.stddev);
     pushHistory(zHistory, z);
+    pushHistory(eventHistory, event);
     tickIndex++;
   }
 
@@ -332,25 +498,31 @@ function resetState(): void {
   const latestStd = Math.max(0, (upperHistory[upperHistory.length - 1] ?? 0) - latestMean);
   const latestMax = Math.max(...sampleHistory);
   const latestZ = zHistory[zHistory.length - 1] ?? 0;
+  const latestEvent = eventHistory[eventHistory.length - 1] ?? false;
   latestRollingMean = latestMean;
 
-  renderAll(latestSample, latestMean, latestStd, latestMax, latestZ);
+  renderAll(latestSample, latestMean, latestStd, latestMax, latestZ, latestEvent);
   updateSampleZoneMarker();
 }
 
 function runTick(): void {
   const sample = movingSource.sample(tickIndex);
-  const stats = statsBuffer.push(sample);
-  const z = stats.stddev > 1e-6 ? (sample - stats.mean) / stats.stddev : 0;
+  const prevStats = statsBuffer.snapshot();
+  const { event: prevEvent } = detectEvent(sample, prevStats.mean, prevStats.stddev);
+  const shouldFreeze = freezeBackgroundOnEvent && prevEvent;
+
+  const stats = shouldFreeze ? prevStats : statsBuffer.push(sample);
+  const { z, event } = detectEvent(sample, stats.mean, stats.stddev);
 
   pushHistory(sampleHistory, sample);
   pushHistory(meanHistory, stats.mean);
   pushHistory(upperHistory, stats.mean + stats.stddev);
   pushHistory(lowerHistory, stats.mean - stats.stddev);
   pushHistory(zHistory, z);
+  pushHistory(eventHistory, event);
   latestRollingMean = stats.mean;
 
-  renderAll(sample, stats.mean, stats.stddev, stats.max, z);
+  renderAll(sample, stats.mean, stats.stddev, stats.max, z, event);
   tickIndex++;
 }
 
@@ -399,6 +571,9 @@ async function onSourceChange(): Promise<void> {
   hzEl,
   windowEl,
   zThrEl,
+  sigmaFloorEl,
+  deltaFloorEl,
+  freezeBgOnEventEl,
   baselineEl,
   noiseEl,
   driftEl,
@@ -444,6 +619,7 @@ resetBtn.addEventListener('click', () => {
 });
 
 applyControlValues();
+initSliderHelp();
 syncSourceConfigs();
 updateSampleZoneMarker();
 orchestrator.setTargetHz(hz);

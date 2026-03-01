@@ -45,6 +45,67 @@
     .controls { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
     .controls .panel-title { grid-column: 1 / -1; margin-bottom: 0; }
     .ctrl { display: grid; gap: 4px; }
+    .label-row { display: flex; align-items: center; gap: 6px; }
+    .label-row .label { margin: 0; }
+    .info-btn {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #0f1520;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+    }
+    .info-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .help-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 8, 20, 0.65);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 16px;
+    }
+    .help-modal-backdrop.visible { display: flex; }
+    .help-modal {
+      width: min(560px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .help-modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .help-modal-title { margin: 0; font-size: 16px; }
+    .help-modal-close {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #111827;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .help-modal-body {
+      margin: 0;
+      color: var(--text);
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
     .sim-only { display: none; }
     select, input[type="range"], button {
       background: #111827;
@@ -156,6 +217,18 @@
       <div class="ctrl">
         <label class="label" for="z-thr">Z threshold: <span id="z-thr-val">2.00</span></label>
         <input id="z-thr" type="range" min="0.5" max="4" step="0.05" value="2.0" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="sigma-floor">Sigma floor: <span id="sigma-floor-val">4.0</span></label>
+        <input id="sigma-floor" type="range" min="0" max="20" step="0.5" value="4.0" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="delta-floor">Delta floor: <span id="delta-floor-val">15</span></label>
+        <input id="delta-floor" type="range" min="0" max="80" step="1" value="15" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="freeze-bg-on-event">Freeze background on event</label>
+        <input id="freeze-bg-on-event" type="checkbox" checked />
       </div>
 
       <div class="ctrl sim-only">
@@ -272,6 +345,16 @@
       <div class="legend">
         <span class="badge thr">positive z-threshold exceeded</span>
       </div>
+    </div>
+  </div>
+
+  <div id="help-modal-backdrop" class="help-modal-backdrop" aria-hidden="true">
+    <div id="help-modal" class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+      <div class="help-modal-head">
+        <h3 id="help-modal-title" class="help-modal-title">Variable info</h3>
+        <button id="help-modal-close" class="help-modal-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <p id="help-modal-body" class="help-modal-body"></p>
     </div>
   </div>
 
