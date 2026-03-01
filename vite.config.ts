@@ -15,6 +15,7 @@ export default defineConfig({
           if (req.url === '/flash') req.url = '/flash.html';
           if (req.url === '/demo') req.url = '/demo.html';
           if (req.url === '/pattern-demo') req.url = '/pattern-demo.html';
+          if (req.url === '/background-stats-demo') req.url = '/background-stats-demo.html';
           next();
         });
       },
@@ -38,6 +39,7 @@ export default defineConfig({
         flash: resolve(__dirname, 'flash.html'),
         demo:  resolve(__dirname, 'demo.html'),
         patternDemo: resolve(__dirname, 'pattern-demo.html'),
+        backgroundStatsDemo: resolve(__dirname, 'background-stats-demo.html'),
       },
     },
   },

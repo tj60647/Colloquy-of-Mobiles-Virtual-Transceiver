@@ -8,6 +8,7 @@ import { AUDIO_BANDPASS_DEFAULT_CENTER, AUDIO_BANDPASS_DEFAULT_Q } from '../shar
  */
 export interface AppConfig {
   detectorMode:    'light' | 'audio';
+  matcherInputMode: 'detector' | 'scalar-fixed' | 'scalar-zscore';
   sampleRateHz:    20 | 40;
   grayscaleProcessing: boolean;
   threshold:       number;   // detection delta threshold (0–255)
@@ -17,7 +18,6 @@ export interface AppConfig {
   patternMatchThreshold: number; // pattern matcher acceptance threshold (0–1)
   viewMode:        ViewMode; // 'live' | 'background' | 'difference'
   backgroundAlpha: number;   // EMA learning rate (0–1)
-  morseUnitMs:     number;   // Morse unit duration in ms
   zone: ZoneConfig;
   fov:  FovConfig;
 }
@@ -34,6 +34,7 @@ export interface AppConfig {
 export class UI {
   readonly config: AppConfig = {
     detectorMode:    'light',
+    matcherInputMode: 'detector',
     sampleRateHz:    20,
     grayscaleProcessing: true,
     threshold:       30,
@@ -43,7 +44,6 @@ export class UI {
     patternMatchThreshold: 0.875,
     viewMode:        'live',
     backgroundAlpha: 0.03,
-    morseUnitMs:     100,
     zone: {
       radius: 50,
       unit:   'deg',
@@ -58,8 +58,8 @@ export class UI {
 
   /** Called when the user clicks "Reset Background" */
   onResetBackground?: () => void;
-  /** Called when the user clicks "Reset Decoder" */
-  onResetDecoder?: () => void;
+  /** Called when the user clicks "Clear Pattern Buffer" */
+  onResetPattern?: () => void;
 
   constructor() {
     this.bind();
@@ -73,6 +73,13 @@ export class UI {
 
     this.select('sample-rate', v => {
       this.config.sampleRateHz = v === '20' ? 20 : 40;
+    });
+
+    this.select('matcher-input-mode', v => {
+      this.config.matcherInputMode =
+        v === 'scalar-fixed' || v === 'scalar-zscore'
+          ? v
+          : 'detector';
     });
 
     this.toggle('grayscale-processing', v => {
@@ -142,8 +149,8 @@ export class UI {
       this.onResetBackground?.();
     });
 
-    document.getElementById('btn-reset-decode')?.addEventListener('click', () => {
-      this.onResetDecoder?.();
+    document.getElementById('btn-reset-pattern')?.addEventListener('click', () => {
+      this.onResetPattern?.();
     });
   }
 

@@ -22,7 +22,7 @@ export interface MatchResult {
 /** Minimum match fraction required to report a hit. */
 const DEFAULT_THRESHOLD = 0.875;
 
-const BUF_LEN = PATTERN_LEN * 2;
+const BUF_LEN = PATTERN_LEN;
 
 export class PatternMatcher {
   private buf: Uint8Array = new Uint8Array(BUF_LEN);

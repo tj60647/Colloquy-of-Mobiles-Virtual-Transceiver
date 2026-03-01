@@ -6,7 +6,7 @@
  *     ↓  (every 25 ms = 40 Hz)
  *   LightDetector.detect → LightReading
  *     → RingBuffer.push
- *     → PatternDecoder.addSample
+ *     → PatternMatcher.addSample
  *     → WsClient.sendReading
  *   Renderer.render  (every rAF frame for smooth visuals)
  */
@@ -19,13 +19,15 @@ import { FovMapper         } from './fovMapper.js';
 import { LightDetector    } from './detector.js';
 import { AudioDetector    } from './audioDetector.js';
 import { RingBuffer        } from './ringBuffer.js';
-import { PatternDecoder   } from './patternDecoder.js';
 import { PatternMatcher   } from './patternMatcher.js';
+import { MatcherInputAdapter } from './matcherInputAdapter.js';
 import { Renderer          } from './renderer.js';
 import { WsClient          } from './wsClient.js';
 import { UI                } from './ui.js';
-import { DICT_LABELS       } from '../shared/dictionary.js';
+import { DICT_LABELS, DICT_WORDS       } from '../shared/dictionary.js';
 import { PATTERN_LEN } from '../shared/dictionary.js';
+import { AdaptiveZScoreStrategy, FixedThresholdStrategy } from '../shared/samplePipeline.js';
+import type { DictWord } from '../shared/dictionary.js';
 import type { LightReading } from '../shared/types.js';
 
 const SENSOR_CONFIG_URL = '/config/sensor.config.json';
@@ -33,6 +35,7 @@ const SENSOR_CONFIG_STORAGE_KEY = 'vcl.sensor.config.v1';
 const CAMERA_DEVICE_STORAGE_KEY = 'vcl.camera.deviceId.v1';
 const SAMPLE_RATE_LOG_WINDOW_MS = 30_000;
 const HUD_SPARKLINE_SAMPLES = 152;
+const SCALAR_ZSCORE_THRESHOLD = 1.5;
 
 const SENSOR_CONTROL_IDS = [
   'detector-mode',
@@ -42,6 +45,7 @@ const SENSOR_CONTROL_IDS = [
   'audio-threshold',
   'audio-bp-center',
   'audio-bp-q',
+  'matcher-input-mode',
   'pattern-threshold',
   'view-mode',
   'bg-alpha',
@@ -196,6 +200,14 @@ function formatCameraError(err: unknown): string {
   return text;
 }
 
+function createZeroPatternScores(): Record<DictWord, number> {
+  const scores = {} as Record<DictWord, number>;
+  for (const word of DICT_WORDS) {
+    scores[word] = 0;
+  }
+  return scores;
+}
+
 async function main(): Promise<void> {
   // ── DOM ───────────────────────────────────────────────────────────────────
   const canvas = document.getElementById('main-canvas') as HTMLCanvasElement;
@@ -284,8 +296,11 @@ async function main(): Promise<void> {
   const det     = new LightDetector(ui.config.threshold);
   const rb      = new RingBuffer<boolean>(PATTERN_LEN);
   for (let i = 0; i < PATTERN_LEN; i++) rb.push(false);
-  const decoder = new PatternDecoder(ui.config.morseUnitMs);
   const matcher = new PatternMatcher();
+  const fixedStrategy = new FixedThresholdStrategy(ui.config.threshold);
+  const zScoreStrategy = new AdaptiveZScoreStrategy(SCALAR_ZSCORE_THRESHOLD);
+  const scalarFixedAdapter = new MatcherInputAdapter(fixedStrategy, PATTERN_LEN);
+  const scalarZScoreAdapter = new MatcherInputAdapter(zScoreStrategy, PATTERN_LEN);
   const audioDet = new AudioDetector(ui.config.audioBandpassCenter, ui.config.audioBandpassQ);
   const renderer= new Renderer(canvas, ctx);
 
@@ -388,6 +403,8 @@ async function main(): Promise<void> {
   const matchEl = document.getElementById('pattern-match');
   const matchWordEl  = matchEl?.querySelector('.match-word')  as HTMLElement | null;
   const matchScoreEl = matchEl?.querySelector('.match-score') as HTMLElement | null;
+  let activePatternMatch = matcher.lastMatch;
+  let activePatternScores: Record<DictWord, number> = { ...matcher.lastScores };
 
   // ── WebSocket ─────────────────────────────────────────────────────────────
   // In dev Vite proxies /ws → ws://localhost:3001/ws
@@ -408,11 +425,19 @@ async function main(): Promise<void> {
 
   // ── UI callbacks ──────────────────────────────────────────────────────────
   ui.onResetBackground = () => bgModel.reset();
-  ui.onResetDecoder    = () => {
-    decoder.reset();
+
+  const resetPatternState = (): void => {
     matcher.reset();
+    scalarFixedAdapter.reset();
+    scalarZScoreAdapter.reset();
     rb.clear();
     for (let i = 0; i < PATTERN_LEN; i++) rb.push(false);
+    activePatternMatch = null;
+    activePatternScores = createZeroPatternScores();
+  };
+
+  ui.onResetPattern    = () => {
+    resetPatternState();
   };
 
   // ── Main loop ─────────────────────────────────────────────────────────────
@@ -420,6 +445,8 @@ async function main(): Promise<void> {
   let lastReading: LightReading | null = null;
   let audioInitPending = false;
   let lastAudioSpectrum: Uint8Array | null = null;
+  let lastMatcherInputMode = ui.config.matcherInputMode;
+  let lastDetectorMode = ui.config.detectorMode;
   let prevSampleIntervalMs = 1000 / ui.config.sampleRateHz;
   let lastSampleWallTs = 0;
   let effectiveSampleHz = 0;
@@ -490,9 +517,19 @@ async function main(): Promise<void> {
     fov.config           = ui.config.fov;
     det.threshold        = ui.config.threshold;
     matcher.threshold    = ui.config.patternMatchThreshold;
-    decoder.unitMs       = ui.config.morseUnitMs;
+    scalarFixedAdapter.matcher.threshold = ui.config.patternMatchThreshold;
+    scalarZScoreAdapter.matcher.threshold = ui.config.patternMatchThreshold;
+    fixedStrategy.threshold = ui.config.detectorMode === 'audio'
+      ? ui.config.audioThreshold
+      : ui.config.threshold;
     zone.updateDimensions(camera.width, camera.height);
     audioDet.setBandpass(ui.config.audioBandpassCenter, ui.config.audioBandpassQ);
+
+    if (ui.config.matcherInputMode !== lastMatcherInputMode || ui.config.detectorMode !== lastDetectorMode) {
+      resetPatternState();
+      lastMatcherInputMode = ui.config.matcherInputMode;
+      lastDetectorMode = ui.config.detectorMode;
+    }
 
     // Advance zone oscillation
     zone.update(timestamp);
@@ -539,14 +576,25 @@ async function main(): Promise<void> {
         const reading = det.detect(imageData, bgModel, zone, fov, sampleTs);
         lastReading = reading;
 
-        rb.push(reading.detected);
-        decoder.addSample(reading.detected, sampleTs);
-        matcher.addSample(reading.detected);
+        let matchDetected = reading.detected;
+        if (ui.config.matcherInputMode === 'detector') {
+          matcher.addSample(reading.detected);
+          activePatternMatch = matcher.lastMatch;
+          activePatternScores = { ...matcher.lastScores };
+        } else {
+          const adapter = ui.config.matcherInputMode === 'scalar-zscore'
+            ? scalarZScoreAdapter
+            : scalarFixedAdapter;
+          const tick = adapter.process(reading.delta);
+          matchDetected = tick.detected;
+          activePatternMatch = tick.match;
+          activePatternScores = tick.scores;
+        }
 
-        decoder.flush(sampleTs);
+        rb.push(matchDetected);
 
         if (matchEl) {
-          const m = matcher.lastMatch;
+          const m = activePatternMatch;
           if (m) {
             matchWordEl && (matchWordEl.textContent = m.word);
             matchScoreEl && (matchScoreEl.textContent = `${DICT_LABELS[m.word]}  ${Math.round(m.score * 100)}%`);
@@ -556,7 +604,7 @@ async function main(): Promise<void> {
           }
         }
 
-        const match = matcher.lastMatch;
+        const match = activePatternMatch;
         wsClient.sendReading({
           ...reading,
           sampleRateHz: ui.config.sampleRateHz,
@@ -599,14 +647,25 @@ async function main(): Promise<void> {
         };
         lastReading = reading;
 
-        rb.push(reading.detected);
-        decoder.addSample(reading.detected, sampleTs);
-        matcher.addSample(reading.detected);
+        let matchDetected = reading.detected;
+        if (ui.config.matcherInputMode === 'detector') {
+          matcher.addSample(reading.detected);
+          activePatternMatch = matcher.lastMatch;
+          activePatternScores = { ...matcher.lastScores };
+        } else {
+          const adapter = ui.config.matcherInputMode === 'scalar-zscore'
+            ? scalarZScoreAdapter
+            : scalarFixedAdapter;
+          const tick = adapter.process(reading.delta);
+          matchDetected = tick.detected;
+          activePatternMatch = tick.match;
+          activePatternScores = tick.scores;
+        }
 
-        decoder.flush(sampleTs);
+        rb.push(matchDetected);
 
         if (matchEl) {
-          const m = matcher.lastMatch;
+          const m = activePatternMatch;
           if (m) {
             matchWordEl && (matchWordEl.textContent = m.word);
             matchScoreEl && (matchScoreEl.textContent = `${DICT_LABELS[m.word]}  ${Math.round(m.score * 100)}%`);
@@ -616,7 +675,7 @@ async function main(): Promise<void> {
           }
         }
 
-        const match = matcher.lastMatch;
+        const match = activePatternMatch;
         wsClient.sendReading({
           ...reading,
           sampleRateHz: ui.config.sampleRateHz,
@@ -652,10 +711,10 @@ async function main(): Promise<void> {
       zone,
       ringBuffer:      rb,
       lastReading,
-      decoder,
-      patternMatch:    matcher.lastMatch,
-      patternScores:   matcher.lastScores,
+      patternMatch:    activePatternMatch,
+      patternScores:   activePatternScores,
       detectorMode:    ui.config.detectorMode,
+      matcherInputMode: ui.config.matcherInputMode,
       audioSpectrum:   lastAudioSpectrum,
       audioBandpassCenter: ui.config.audioBandpassCenter,
       audioBandpassQ:  ui.config.audioBandpassQ,

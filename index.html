@@ -221,6 +221,17 @@
     <div class="section">
       <div class="section-label">Pattern recognition</div>
       <div class="ctrl-row">
+        <label for="matcher-input-mode">Input mode</label>
+        <select id="matcher-input-mode">
+          <option value="detector">Detector bit (EMA path)</option>
+          <option value="scalar-fixed">Scalar fixed threshold</option>
+          <option value="scalar-zscore">Scalar adaptive z-score</option>
+        </select>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.5;">
+        Z-score uses rolling mean and stddev: <span style="font-family:Consolas,monospace;">z = (sample - mean) / stddev</span>.
+      </div>
+      <div class="ctrl-row">
         <label for="pattern-threshold">Match thr</label>
         <input type="range" id="pattern-threshold" />
         <span class="ctrl-val" id="pattern-threshold-val">0.875</span>
@@ -234,7 +245,7 @@
         listen window is protocol spacing and is not used by matcher score.
       </div>
       <div class="btn-row" style="margin-top:8px;">
-        <button id="btn-reset-decode" class="danger">
+        <button id="btn-reset-pattern" class="danger">
           Clear buffer
         </button>
       </div>
@@ -259,6 +270,8 @@
       <a href="/demo" target="_blank" rel="noopener">Open WebSocket demo ↗</a>
       <span style="opacity:0.6;"> · </span>
       <a href="/pattern-demo" target="_blank" rel="noopener">Open Pattern Comparison demo ↗</a>
+      <span style="opacity:0.6;"> · </span>
+      <a href="/background-stats-demo" target="_blank" rel="noopener">Open Background Stats demo ↗</a>
     </div>
 
   </aside>

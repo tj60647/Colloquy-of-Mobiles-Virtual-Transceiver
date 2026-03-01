@@ -31,7 +31,7 @@ Webcam-based light-pattern detector with two browser apps:
 
 ### Key technical risks / gaps
 1. **No automated tests**
-   - Core behavior (decoder thresholds, matcher alignment logic, detector output invariants) is untested.
+  - Core behavior (matcher alignment logic, detector output invariants) is untested.
 2. **WebSocket trust model is open**
    - Any client can identify as `sensor`/`subscriber`; no origin allowlist, token auth, or role authorization.
 3. **No heartbeat/timeout for stale sockets**
@@ -46,7 +46,6 @@ Webcam-based light-pattern detector with two browser apps:
 ### Prioritized improvements
 **P0 (high impact / low-medium effort)**
 - Add unit tests for:
-  - `PatternDecoder` timing boundaries (dot/dash and gap transitions).
   - `PatternMatcher` threshold/alignment behavior.
   - `FovMapper` round-trip sanity.
 - Add minimal WebSocket auth (shared token) and reject unauthenticated role claims.
@@ -72,7 +71,6 @@ Camera frame (rAF)
   -> every 25ms (40Hz):
        LightDetector.detect
        -> RingBuffer.push
-       -> PatternDecoder.addSample/flush
        -> PatternMatcher.addSample
        -> WsClient.sendReading
   -> Renderer.draw (canvas HUD + overlays)
@@ -85,6 +83,27 @@ WebSocket relay server (/ws)
 Transmitter client (/flash)
   -> emits fixed 40-segment dictionary words via torch or tone
 ```
+
+### Signal-processing direction (EMA kept, matcher pipeline generalized)
+
+The current camera path keeps the EMA background model and detector as-is.
+In parallel, the project is moving toward a reusable matcher input pipeline for
+simulation and embedded-style sources:
+
+- Input: one scalar sample per tick (e.g., single-pixel grayscale value).
+- Rolling window: `PATTERN_LEN` samples (currently 40).
+- Per-tick stats: mean, max, stddev updated every sample tick.
+- Decision stage: strategy converts scalar/stats to boolean `detected` bit.
+- Matcher stage: `PatternMatcher.addSample(detected)` compares against dictionary.
+
+Z-score mode uses the same mean/stddev stats and normalizes the current sample:
+
+- `z = (sample - mean) / stddev`
+- A threshold like `z >= 1.5` is equivalent to `sample >= mean + 1.5 * stddev`.
+- This helps keep behavior stable when absolute brightness scale changes.
+
+This allows non-camera apps (simulation, Arduino-adjacent tooling) to reuse the
+same dictionary matcher behavior without depending on EMA internals.
 
 ---
 
@@ -101,7 +120,6 @@ src/
     detector.ts         Zone luminance delta detector
     sensitivityZone.ts  Trapezoidal motion profiles (X/Y)
     fovMapper.ts        Pixel <-> angle conversions
-    patternDecoder.ts   Timing-based Morse decoder
     patternMatcher.ts   Dictionary pattern matcher
     renderer.ts         Canvas rendering + HUD
     wsClient.ts         Sensor WebSocket client with reconnect
@@ -191,6 +209,8 @@ npm run dev
 Use:
 - Sensor app: `http://localhost:5173/`
 - Transmitter app: `http://localhost:5173/flash`
+- Pattern comparison demo: `http://localhost:5173/pattern-demo`
+- Background stats demo: `http://localhost:5173/background-stats-demo`
 
 Vite proxies `/ws` to `ws://localhost:3001/ws` in dev.
 
@@ -238,7 +258,6 @@ Server listens on `PORT` (default `3001`) and serves built client from `dist/cli
 - **No detections:** lower exposure/ISO in camera controls, reduce ambient light, then tune threshold.
 - **WS disconnected:** verify server is running and `/ws` proxy path is correct.
 - **Torch unavailable:** switch to sound mode or use Android Chrome with rear camera.
-- **Decode noisy:** increase Morse unit duration and/or reduce detection threshold oscillation.
 
 ### Quick validation checklist (laptop + phone)
 
@@ -269,8 +288,9 @@ Server listens on `PORT` (default `3001`) and serves built client from `dist/cli
 
 ## Suggested next work items
 
-1. Add `vitest` unit tests for decoder/matcher/fov mapper.
-2. Add WS auth token and role guard.
-3. Add server heartbeat timeout for client pruning.
-4. Add lightweight telemetry (sample Hz, reconnect count, decode hit rate).
-5. Add CI job for build + tests.
+1. Implement scalar-sample rolling stats module (`PATTERN_LEN` window, per-tick mean/max/stddev).
+2. Add pluggable sample-to-bit decision strategies (fixed threshold, adaptive z-score).
+3. Add matcher input adapter so simulation/embedded pipelines can feed `PatternMatcher` directly.
+4. Keep camera+EMA path selectable and unchanged for current sensor UI.
+5. Add docs/examples showing how external apps provide scalar samples and consume match metadata.
+6. Add `vitest` unit tests for matcher/fov mapper and new rolling-stats logic.

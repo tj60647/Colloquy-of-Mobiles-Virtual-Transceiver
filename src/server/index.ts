@@ -44,6 +44,7 @@ const httpServer = http.createServer((req, res) => {
     urlPath === '/flash' ? '/flash.html' :
     urlPath === '/demo'  ? '/demo.html' :
     urlPath === '/pattern-demo' ? '/pattern-demo.html' :
+    urlPath === '/background-stats-demo' ? '/background-stats-demo.html' :
     urlPath;
   const filePath = path.join(DIST_CLIENT, resolved);
 

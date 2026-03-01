@@ -3,7 +3,6 @@ import { DICT_LABELS, type DictWord } from '../shared/dictionary.js';
 import type { SensitivityZone } from './sensitivityZone.js';
 import type { BackgroundModel  } from './background.js';
 import type { RingBuffer       } from './ringBuffer.js';
-import type { PatternDecoder   } from './patternDecoder.js';
 import type { MatchResult } from './patternMatcher.js';
 
 export type ViewMode = 'live' | 'background' | 'difference';
@@ -15,10 +14,10 @@ export interface RenderParams {
   zone:            SensitivityZone;
   ringBuffer:      RingBuffer<boolean>;
   lastReading:     LightReading | null;
-  decoder:         PatternDecoder;
   patternMatch:    MatchResult | null;
   patternScores:   Record<DictWord, number>;
   detectorMode:    'light' | 'audio';
+  matcherInputMode: 'detector' | 'scalar-fixed' | 'scalar-zscore';
   audioSpectrum:   Uint8Array | null;
   audioBandpassCenter: number;
   audioBandpassQ:  number;
@@ -38,8 +37,6 @@ const COLORS = {
   hudText:     '#d8d8d8',
   hudAccent:   '#00ff88',
   hudWarning:  '#ff8844',
-  morseText:   '#00ff88',
-  morseCode:   '#ffcc00',
 };
 
 const WORDS_I: DictWord[] = ['I_O', 'I_P', 'I_OP', 'I_R'];
@@ -54,7 +51,7 @@ const ALL_WORDS: DictWord[] = [...WORDS_I, ...WORDS_II];
  *   1. Video frame (live) or background model image
  *   2. Oscillating sensitivity zone (dashed circle + crosshair)
  *   3. Ring-buffer visualisation (arc segments around the zone)
- *   4. HUD overlay (readings, angles, WS status, Morse output)
+ *   4. HUD overlay (readings, angles, WS status, pattern confidence)
  */
 export class Renderer {
   private readonly specWidth = 130;
@@ -230,7 +227,7 @@ export class Renderer {
 
     // ── Info panel (top-left) ────────────────────────────────────────────────
     const panelW = 240;
-    const panelH = 196;
+    const panelH = 214;
     ctx.save();
     ctx.fillStyle = COLORS.hudBg;
     this.roundRect(0, 0, panelW, panelH, 0);
@@ -246,6 +243,11 @@ export class Renderer {
     const lines: Array<[string, string]> = r
       ? [
           ['DETECT', detected ? '● YES' : '○ no'],
+          ['MATCH ', p.matcherInputMode === 'detector'
+            ? 'detector bit'
+            : p.matcherInputMode === 'scalar-fixed'
+              ? 'scalar fixed'
+              : 'scalar z-score'],
           ['PIXEL ', `${r.frameX}, ${r.frameY} px`],
           ['ANGLE ', `${r.xAngle.toFixed(1)}° H  ${r.yAngle.toFixed(1)}° V`],
           ['BRIGHT', `${r.brightness}  (bg ${r.background})`],
@@ -292,7 +294,7 @@ export class Renderer {
 
     ctx.textBaseline = 'top';
     ctx.font      = 'bold 13px "Courier New", monospace';
-    ctx.fillStyle = COLORS.morseText;
+    ctx.fillStyle = COLORS.hudAccent;
     const titleY = height - botH + 8;
     ctx.fillText('PATTERN CONFIDENCE', 12, titleY);
 

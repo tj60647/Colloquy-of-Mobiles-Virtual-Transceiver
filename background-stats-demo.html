@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Background vs Sensor Demo</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1116;
+      --panel: #171d27;
+      --border: #2a3442;
+      --text: #dbe4f0;
+      --muted: #95a6bc;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Segoe UI, system-ui, sans-serif;
+      padding: 18px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; display: grid; gap: 10px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .label { color: var(--muted); font-size: 12px; }
+    .panel-title {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      margin-bottom: 8px;
+    }
+    .mono { font-family: Consolas, Monaco, monospace; }
+    .controls { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
+    .controls .panel-title { grid-column: 1 / -1; margin-bottom: 0; }
+    .ctrl { display: grid; gap: 4px; }
+    .sim-only { display: none; }
+    select, input[type="range"], button {
+      background: #111827;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    .stats { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 8px; }
+    .stat { background: #0f1520; border: 1px solid #222c39; border-radius: 8px; padding: 8px; }
+    .v { font-family: Consolas, Monaco, monospace; font-size: 14px; }
+    .v.ok { color: var(--ok); }
+    .v.warn { color: var(--warn); }
+    .v.bad { color: var(--bad); }
+    canvas {
+      width: 100%;
+      height: 170px;
+      display: block;
+      background: #0e141d;
+      border: 1px solid #222c39;
+      border-radius: 8px;
+    }
+    .legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    .badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; }
+    .badge.sensor { color: #a5b4fc; border-color: rgba(165,180,252,.5); }
+    .badge.mean { color: #22d3ee; border-color: rgba(34,211,238,.5); }
+    .badge.std { color: #94a3b8; border-color: rgba(148,163,184,.5); }
+    .badge.z { color: #f59e0b; border-color: rgba(245,158,11,.5); }
+    .badge.thr { color: #ef4444; border-color: rgba(239,68,68,.5); }
+    .note { line-height: 1.5; color: var(--muted); font-size: 13px; }
+    .camera-panel { display: grid; grid-template-columns: minmax(200px, 280px) 1fr; gap: 10px; align-items: start; }
+    .camera-preview-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 260px;
+    }
+    .camera-preview {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #0b1018;
+      border: 1px solid #222c39;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+    .sample-zone {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      transform: translate(-50%, -50%);
+      border: 2px solid rgba(34, 211, 238, 0.95);
+      border-radius: 3px;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65), 0 0 10px rgba(34, 211, 238, 0.45);
+      pointer-events: none;
+    }
+    .sample-zone::before,
+    .sample-zone::after {
+      content: '';
+      position: absolute;
+      background: rgba(34, 211, 238, 0.9);
+    }
+    .sample-zone::before {
+      left: 50%;
+      top: -6px;
+      width: 1px;
+      height: 24px;
+      transform: translateX(-50%);
+    }
+    .sample-zone::after {
+      top: 50%;
+      left: -6px;
+      width: 24px;
+      height: 1px;
+      transform: translateY(-50%);
+    }
+    .camera-meta { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .camera-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .camera-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    @media (max-width: 860px) {
+      .camera-panel { grid-template-columns: 1fr; }
+      .camera-controls { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <h2 style="margin:0;">Background vs Sensor Demo</h2>
+      <a href="/" style="color:var(--accent)">Sensor</a>
+      <a href="/flash" style="color:var(--accent)">Transmitter</a>
+      <a href="/pattern-demo" style="color:var(--accent)">Pattern Comparison Demo</a>
+    </div>
+
+    <div class="card note">
+      Uses a single-pixel sensor stream (camera by default) and compares each incoming sample against a rolling background model.
+      Every sample tick updates rolling <span class="mono">mean</span>, <span class="mono">stddev</span>, and
+      <span class="mono">z-score = (sample - mean) / stddev</span>.
+    </div>
+
+    <div class="card controls">
+      <div class="panel-title">Configuration</div>
+      <div class="ctrl">
+        <label class="label" for="sample-source">Sample source</label>
+        <select id="sample-source">
+          <option value="camera" selected>Camera luminance</option>
+          <option value="simulated">Simulated signal</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label class="label" for="hz">Sample rate (Hz): <span id="hz-val">20</span></label>
+        <input id="hz" type="range" min="1" max="40" step="1" value="20" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="window">Window size (samples): <span id="window-val">40</span></label>
+        <input id="window" type="range" min="8" max="120" step="1" value="40" />
+      </div>
+      <div class="ctrl">
+        <label class="label" for="z-thr">Z threshold: <span id="z-thr-val">1.50</span></label>
+        <input id="z-thr" type="range" min="0.5" max="4" step="0.05" value="1.5" />
+      </div>
+
+      <div class="ctrl sim-only">
+        <label class="label" for="baseline">Baseline: <span id="baseline-val">100</span></label>
+        <input id="baseline" type="range" min="0" max="255" step="1" value="100" />
+      </div>
+      <div class="ctrl sim-only">
+        <label class="label" for="noise">Noise stddev: <span id="noise-val">6</span></label>
+        <input id="noise" type="range" min="0" max="30" step="1" value="6" />
+      </div>
+      <div class="ctrl sim-only">
+        <label class="label" for="drift">Slow drift amp: <span id="drift-val">8</span></label>
+        <input id="drift" type="range" min="0" max="40" step="1" value="8" />
+      </div>
+
+      <div class="ctrl sim-only">
+        <label class="label" for="pulse-amp">Pulse amplitude: <span id="pulse-amp-val">30</span></label>
+        <input id="pulse-amp" type="range" min="0" max="120" step="1" value="30" />
+      </div>
+      <div class="ctrl sim-only">
+        <label class="label" for="pulse-every">Pulse every N ticks: <span id="pulse-every-val">40</span></label>
+        <input id="pulse-every" type="range" min="8" max="120" step="1" value="40" />
+      </div>
+    </div>
+
+    <div class="card camera-panel">
+      <div class="panel-title" style="grid-column: 1 / -1; margin-bottom: 2px;">Camera Source</div>
+      <div class="camera-preview-wrap">
+        <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
+        <div class="sample-zone" aria-hidden="true" title="Center sampling zone"></div>
+      </div>
+      <div class="camera-meta">
+        <div><strong style="color:var(--text);">Camera source status</strong></div>
+        <div id="camera-status">Simulated source active.</div>
+        <div style="margin-top:6px;">
+          In camera mode, each sample tick reads current frame luminance at the
+          highlighted sampling zone and feeds it into rolling mean/stddev/z-score stats.
+        </div>
+        <div class="camera-controls">
+          <div class="ctrl">
+            <label class="label" for="sample-x-range-min">X range min: <span id="sample-x-range-min-val">-20</span>%</label>
+            <input id="sample-x-range-min" type="range" min="-45" max="0" step="1" value="-20" />
+          </div>
+          <div class="ctrl">
+            <label class="label" for="sample-x-range-max">X range max: <span id="sample-x-range-max-val">20</span>%</label>
+            <input id="sample-x-range-max" type="range" min="0" max="45" step="1" value="20" />
+          </div>
+          <div class="ctrl">
+            <label class="label" for="sample-x-max-vel">X max vel: <span id="sample-x-max-vel-val">30</span> %/s</label>
+            <input id="sample-x-max-vel" type="range" min="0" max="180" step="1" value="30" />
+          </div>
+          <div class="ctrl">
+            <label class="label" for="sample-x-max-acc">X max acc: <span id="sample-x-max-acc-val">60</span> %/s²</label>
+            <input id="sample-x-max-acc" type="range" min="0" max="360" step="1" value="60" />
+          </div>
+        </div>
+        <div class="camera-actions">
+          <button id="btn-run">Pause</button>
+          <button id="btn-reset">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card stats">
+      <div class="panel-title" style="grid-column: 1 / -1; margin-bottom: 0;">Current Tick Metrics</div>
+      <div class="stat"><div class="label">Sample</div><div id="sample-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Background mean</div><div id="mean-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Stddev</div><div id="std-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Max (window)</div><div id="max-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Z-score</div><div id="z-now" class="v">—</div></div>
+      <div class="stat"><div class="label">Z event</div><div id="event-now" class="v">—</div></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Signal vs background</div>
+      <canvas id="signal-chart" width="1000" height="170"></canvas>
+      <div class="legend">
+        <span class="badge sensor">sensor sample</span>
+        <span class="badge mean">rolling mean</span>
+        <span class="badge std">±1 stddev band</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Z-score over time</div>
+      <canvas id="z-chart" width="1000" height="170"></canvas>
+      <div class="legend">
+        <span class="badge z">z-score</span>
+        <span class="badge thr">±z threshold</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/client/backgroundStatsDemo.ts"></script>
+</body>
+</html>
