@@ -3,7 +3,7 @@
   "selectedWord": "I_O",
   "controls": {
     "invert-toggle": false,
-    "rate-toggle": "0",
+    "rate-toggle": "1",
     "freq-slider": "0"
   }
 }

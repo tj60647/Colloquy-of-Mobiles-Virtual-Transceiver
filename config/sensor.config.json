@@ -1,7 +1,7 @@
 {
   "controls": {
     "detector-mode": "light",
-    "sample-rate": "40",
+    "sample-rate": "20",
     "grayscale-processing": true,
     "threshold": "30",
     "audio-threshold": "20",

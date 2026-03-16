@@ -2,7 +2,7 @@
  * flash.ts – Flash Transmitter
  *
  * Broadcasts one of the 8 dictionary words by toggling the phone's rear
- * camera torch (flashlight) at 40 Hz (25 ms per segment).
+ * camera torch (flashlight) at a selectable rate (20 Hz default, 40 Hz option).
  *
  * Uses the Web Torch API:
  *   track.applyConstraints({ advanced: [{ torch: true/false }] })
@@ -65,7 +65,7 @@ let startTime    = 0;
 let loops        = 0;
 let selectedWord: DictWord = 'I_O';
 let invertTransmission = false;
-let txRateHz: 20 | 40 = 40;
+let txRateHz: 20 | 40 = 20;
 let lastTickWallTs = 0;
 let lastProcessedSegmentCount = -1;
 let effectiveHz = 0;
