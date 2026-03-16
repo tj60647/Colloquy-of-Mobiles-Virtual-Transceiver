@@ -92,13 +92,12 @@ describe('AdaptiveZScoreStrategy', () => {
       for (let i = 0; i < 39; i++) buf.push(50);
       // Large spike
       const stats = buf.push(50); // 40th stable sample
-      const spikeStats = { ...stats, mean: 50, stddev: 0.1 }; // simulate tiny stddev after stable fill
+      const _spikeStats = { ...stats, mean: 50, stddev: 0.1 }; // simulate tiny stddev after stable fill
       // Use the actual buffer stats with a spike sample value
       const spike = 50 + 3 * stats.stddev;
       // stddev after 40 identical values is 0, so guard activates — stddev = 0
       // Verify the guard is working correctly for flat signal
       expect(s.decide({ sample: spike, stats })).toBe(false); // stddev = 0 → guard
-      void spikeStats; // suppress unused var warning
     });
 
     it('triggers correctly when signal has real variance', () => {

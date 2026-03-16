@@ -17,10 +17,22 @@ import * as http from 'http';
 import * as path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { WsMessage, IdentifyPayload, LightReading, PatternDetectedPayload, SubscriberMode } from '../shared/types.js';
+import { WS_PROTOCOL_VERSION } from '../shared/types.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 // Compiled output: dist/server/index.js  →  dist/client is one level up
 const DIST_CLIENT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../client');
+
+// ── WebSocket authentication ─────────────────────────────────────────────────
+// Set WS_TOKEN env var to require a shared-secret token on every identify message.
+// If WS_TOKEN is unset or empty, authentication is skipped (open mode).
+const WS_TOKEN = process.env.WS_TOKEN?.trim() ?? '';
+const AUTH_ENABLED = WS_TOKEN.length > 0;
+if (AUTH_ENABLED) {
+  console.log('[ws] token authentication ENABLED');
+} else {
+  console.log('[ws] token authentication DISABLED (set WS_TOKEN env var to enable)');
+}
 
 // ── HTTP server (serves built frontend in production) ────────────────────────
 
@@ -116,6 +128,20 @@ wss.on('connection', (ws) => {
     switch (msg.type) {
       case 'identify': {
         const p = msg.payload as IdentifyPayload | undefined;
+
+        // ── Token auth ───────────────────────────────────────────────────────
+        if (AUTH_ENABLED) {
+          const providedToken = typeof p?.token === 'string' ? p.token.trim() : '';
+          if (providedToken !== WS_TOKEN) {
+            console.warn(`[ws] rejected unauthenticated identify (role=${p?.role ?? 'unknown'})`);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'pong', version: WS_PROTOCOL_VERSION, payload: { error: 'unauthorized' } }));
+              ws.close(1008, 'Unauthorized');
+            }
+            return;
+          }
+        }
+
         if (p?.role === 'sensor' || p?.role === 'subscriber') {
           state.role = p.role;
           if (state.role === 'subscriber') {
@@ -129,29 +155,32 @@ wss.on('connection', (ws) => {
       }
 
       case 'sensor_reading': {
-        if (state.role === 'sensor') {
-          broadcastToMode(raw.toString(), 'full', ws);
+        if (state.role !== 'sensor') {
+          // Reject sensor_reading from unidentified or unauthorized clients
+          break;
+        }
+        broadcastToMode(raw.toString(), 'full', ws);
 
-          const reading = msg.payload as LightReading | undefined;
-          const patternDetected = reading?.patternDetected ?? null;
+        const reading = msg.payload as LightReading | undefined;
+        const patternDetected = reading?.patternDetected ?? null;
 
-          if (typeof patternDetected === 'string' && patternDetected.length > 0) {
-            if (state.lastPatternDetected !== patternDetected) {
-              const patternMsg: WsMessage = {
-                type: 'pattern_detected',
-                payload: {
-                  timestamp: reading?.timestamp ?? Date.now(),
-                  patternDetected,
-                  patternScore: reading?.patternScore,
-                  sampleRateHz: reading?.sampleRateHz,
-                } satisfies PatternDetectedPayload,
-              };
-              broadcastToMode(JSON.stringify(patternMsg), 'pattern', ws);
-              state.lastPatternDetected = patternDetected;
-            }
-          } else {
-            state.lastPatternDetected = null;
+        if (typeof patternDetected === 'string' && patternDetected.length > 0) {
+          if (state.lastPatternDetected !== patternDetected) {
+            const patternMsg: WsMessage = {
+              type: 'pattern_detected',
+              version: WS_PROTOCOL_VERSION,
+              payload: {
+                timestamp: reading?.timestamp ?? Date.now(),
+                patternDetected,
+                patternScore: reading?.patternScore,
+                sampleRateHz: reading?.sampleRateHz,
+              } satisfies PatternDetectedPayload,
+            };
+            broadcastToMode(JSON.stringify(patternMsg), 'pattern', ws);
+            state.lastPatternDetected = patternDetected;
           }
+        } else {
+          state.lastPatternDetected = null;
         }
         break;
       }

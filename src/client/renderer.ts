@@ -26,6 +26,8 @@ export interface RenderParams {
   deltaHistory: number[];
   threshold:       number;
   wsConnected:     boolean;
+  /** Number of times the WS connection has been (re-)established since page load. */
+  wsReconnectCount: number;
 }
 
 const COLORS = {
@@ -255,7 +257,7 @@ export class Renderer {
           ['RATE  ', `${p.effectiveHz > 0 ? p.effectiveHz.toFixed(1) : '--.-'} Hz`],
           ['POS   ', `${fmt1(p.zone.posX)}${unitLabel}  ${fmt1(p.zone.posY)}${unitLabel}`],
           ['VEL   ', `${fmt1(p.zone.velX)} ${velLabel}  ${fmt1(p.zone.velY)} ${velLabel}`],
-          ['WS    ', p.wsConnected ? 'connected' : 'offline'],
+          ['WS    ', p.wsConnected ? `connected  (rx${p.wsReconnectCount})` : `offline  (rx${p.wsReconnectCount})`],
           ['BUFF  ', `${p.ringBuffer.size} samples`],
         ]
       : [['STATUS', 'Initialising…']];

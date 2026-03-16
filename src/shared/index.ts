@@ -73,6 +73,7 @@ export type {
 } from './tickOrchestrator.js';
 
 // ── Shared domain + protocol types ───────────────────────────────────────────
+export { WS_PROTOCOL_VERSION } from './types.js';
 export type {
   LightReading,
   MotionUnit,

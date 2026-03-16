@@ -100,9 +100,14 @@ export type WsMessageType = 'identify' | 'sensor_reading' | 'pattern_detected' |
 
 export type SubscriberMode = 'full' | 'pattern';
 
+/** Current protocol version.  Bump when message shapes change. */
+export const WS_PROTOCOL_VERSION = 1;
+
 export interface IdentifyPayload {
   role: 'sensor' | 'subscriber';
   mode?: SubscriberMode;
+  /** Optional shared secret token for role-claim authentication. */
+  token?: string;
 }
 
 export interface PatternDetectedPayload {
@@ -114,5 +119,7 @@ export interface PatternDetectedPayload {
 
 export interface WsMessage {
   type: WsMessageType;
+  /** Protocol version for forward-compatibility checks. */
+  version?: number;
   payload?: LightReading | IdentifyPayload | PatternDetectedPayload | Record<string, unknown>;
 }

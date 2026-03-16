@@ -40,8 +40,11 @@ three modes.
   cycle, server-side stale-client pruning.
 - **Performance profile:** **Moderate-to-good** — stable 40 Hz pipeline, with
   one obvious optimization opportunity in the detector hot path.
-- **Operational maturity:** **Moderate** — deployable and understandable, but
-  missing tests, observability, and formal security controls.
+- **Operational maturity:** **Good** — deployable, tested, with optional token
+  auth, CI pipeline, and diagnostics panel.
+- **Test coverage:** ✅ 128 unit tests across PatternMatcher, RollingStatsBuffer,
+  AdaptiveZScoreStrategy, FovMapper, TickOrchestrator, and the deterministic
+  replay harness.
 
 ### What is strong
 
@@ -76,41 +79,52 @@ three modes.
 
 ### Key technical risks / gaps
 
-1. **No automated tests**
-   - Core behaviour (matcher alignment logic, detector output invariants) is
-     untested.
-2. **WebSocket trust model is open**
-   - Any client can identify as `sensor`/`subscriber`; no origin allowlist,
-     token auth, or role authorization.
-3. **Potential detector hot-path inefficiency**
+1. **Potential detector hot-path inefficiency**
    - `LightDetector.detect()` calls `background.getLuminanceAt()` per pixel,
      which repeatedly clamps/rounds and recalculates the index.
-4. **Camera lifecycle cleanup not explicit in main app**
-   - `CameraManager.stop()` exists but is not wired to page-lifecycle events
-     in `main.ts`.
-5. **Limited observability**
-   - Minimal structured logging and no metrics for frame rate, detection rate,
-     dropped WS sends, etc.
+2. **No persistent storage or event replay** — transceiver-layer only.
+3. **No formal API versioning beyond the `version` field** added in Phase 6.
 
-### Prioritized improvements
+### Prioritized improvements (remaining)
 
-**P0 (high impact / low-medium effort)**
-- Add unit tests for `PatternMatcher` threshold/alignment behaviour and
-  `FovMapper` round-trip sanity.
-- Add minimal WebSocket auth (shared token) and reject unauthenticated role
-  claims.
-
-**P1 (performance + reliability)**
+**P1 (performance)**
 - Optimize detector inner loop by computing background luminance from a
   pre-indexed cached luminance frame.
-- Add lifecycle hooks (`visibilitychange`, `beforeunload`) to disconnect WS
-  and stop camera stream.
 
-**P2 (operability + DX)**
-- Add npm scripts for lint/check/test and CI pipeline.
-- Add runtime diagnostics panel (actual sample Hz, decode confidence trends,
-  reconnect count).
-- Add protocol version field to WS messages for forward compatibility.
+**P2 (DX)**
+- Publish `src/shared/` as a standalone npm package.
+- Add simulation examples showing multi-agent conversation replay.
+
+---
+
+## Security
+
+### WebSocket authentication
+
+Set the `WS_TOKEN` environment variable to a non-empty shared secret to
+enable token-based role authentication:
+
+```bash
+WS_TOKEN=my-secret-token npm start
+```
+
+Clients must include the token in their `identify` payload:
+
+```json
+{ "type": "identify", "version": 1, "payload": { "role": "sensor", "token": "my-secret-token" } }
+```
+
+Clients that omit or supply a wrong token receive a `pong` with
+`{ "error": "unauthorized" }` and are disconnected with WS close code `1008`.
+
+When `WS_TOKEN` is unset the server runs in open mode (no authentication).
+
+### Role enforcement
+
+The server enforces that only clients which have successfully completed an
+`identify` as `role="sensor"` may send `sensor_reading` messages.
+Unidentified clients that attempt to send `sensor_reading` are silently
+ignored.
 
 ---
 
@@ -305,15 +319,23 @@ Procfile                  Heroku process declaration
 
 ## Message protocol (`/ws`)
 
+All messages include an optional `"version"` field (integer, currently `1`)
+for forward-compatibility checks.
+
 ### Identify
 ```json
-{ "type": "identify", "payload": { "role": "sensor" } }
+{ "type": "identify", "version": 1, "payload": { "role": "sensor" } }
 ```
 ```json
-{ "type": "identify", "payload": { "role": "subscriber", "mode": "full" } }
+{ "type": "identify", "version": 1, "payload": { "role": "subscriber", "mode": "full" } }
 ```
 ```json
-{ "type": "identify", "payload": { "role": "subscriber", "mode": "pattern" } }
+{ "type": "identify", "version": 1, "payload": { "role": "subscriber", "mode": "pattern" } }
+```
+
+When `WS_TOKEN` auth is enabled, include the token:
+```json
+{ "type": "identify", "version": 1, "payload": { "role": "sensor", "token": "<secret>" } }
 ```
 
 Subscriber modes:
@@ -348,6 +370,7 @@ Subscriber modes:
 ```json
 {
   "type": "pattern_detected",
+  "version": 1,
   "payload": {
     "timestamp": 1739750000000,
     "patternDetected": "I_O",
@@ -388,6 +411,16 @@ that do not respond.
 npm install
 ```
 
+### Run tests
+```bash
+npm test
+```
+
+### Type-check
+```bash
+npm run typecheck
+```
+
 ### Development
 Runs both services concurrently:
 - Vite dev server on `http://localhost:5173`
@@ -410,6 +443,11 @@ Vite proxies `/ws` to `ws://localhost:3001/ws` in dev.
 ```bash
 npm run build
 npm start
+```
+
+Optional: enable WS token auth:
+```bash
+WS_TOKEN=my-secret npm start
 ```
 
 Server listens on `PORT` (default `3001`) and serves built client from `dist/client`.
@@ -471,20 +509,15 @@ Server listens on `PORT` (default `3001`) and serves built client from `dist/cli
 
 ## Current limitations
 
-- No authentication/authorization for WS roles.
-- No test suite.
 - No persistent storage or event replay.
-- No formal API versioning.
+- No formal API versioning beyond the protocol `version` field.
+- Detector hot-path can be further optimised (pre-indexed luminance cache).
 
 ---
 
 ## Suggested next work items
 
-1. Add `vitest` unit tests for `PatternMatcher`, `RollingStatsBuffer`, and `FovMapper`.
-2. Add minimal WebSocket auth (shared secret token) and reject unauthenticated role claims.
-3. Add lifecycle hooks (`visibilitychange`, `beforeunload`) to disconnect WS and stop camera.
+1. Optimize detector inner loop using a pre-indexed cached luminance frame.
+2. Publish `src/shared/` as a standalone npm package for virtual-context consumers.
+3. Add simulation examples showing multi-agent conversation replay.
 4. Add configurable sample rate and ring buffer sizing via UI/config.
-5. Add runtime diagnostics panel (actual Hz, decode confidence, reconnect count).
-6. Add protocol version field to WS messages for forward compatibility.
-7. Publish `src/shared/` as a standalone npm package for virtual-context consumers.
-8. Add simulation examples showing multi-agent conversation replay.

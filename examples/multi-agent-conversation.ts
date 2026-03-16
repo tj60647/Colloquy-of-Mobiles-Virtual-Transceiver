@@ -194,7 +194,8 @@ for (const agent of AGENTS) {
     }
   }
 
-  let firstMatch: { word: DictWord; score: number } | null = null;
+  type MatchSummary = { word: DictWord; score: number };
+  let firstMatch: MatchSummary | null = null;
   let firstMatchSeg = -1;
   isolatedSignal.forEach((sample, seg) => {
     const tick = adapter.process(sample);
@@ -204,12 +205,12 @@ for (const agent of AGENTS) {
     }
   });
 
-  const matched = firstMatch !== null && (firstMatch as { word: DictWord }).word === agent.word;
+  const matched = firstMatch !== null && firstMatch.word === agent.word;
   const score = firstMatch?.score ?? 0;
   const status = matched ? '✅' : '❌';
   console.log(
     `  ${status} ${agent.id.padEnd(10)} expected=${agent.word.padEnd(6)} ` +
-    `got=${((firstMatch as { word: DictWord } | null)?.word ?? 'null').padEnd(6)} ` +
+    `got=${(firstMatch?.word ?? 'null').padEnd(6)} ` +
     `score=${(score * 100).toFixed(1)}%` +
     (firstMatchSeg >= 0 ? `  first_match_at=seg${firstMatchSeg}` : ''),
   );
