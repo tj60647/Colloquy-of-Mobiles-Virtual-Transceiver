@@ -1,4 +1,5 @@
 import type { LightReading, WsMessage } from '../shared/types.js';
+import { WS_PROTOCOL_VERSION } from '../shared/types.js';
 
 /**
  * WsClient
@@ -6,18 +7,26 @@ import type { LightReading, WsMessage } from '../shared/types.js';
  * Thin wrapper around the browser WebSocket API.
  * Identifies itself to the server as role="sensor" and sends LightReadings.
  * Reconnects automatically with exponential back-off on disconnection.
+ *
+ * Optional shared-secret token: pass a non-empty `token` to the constructor
+ * if the server has WS_TOKEN auth enabled.
  */
 export class WsClient {
   private ws: WebSocket | null = null;
   private retryDelay = 1000; // ms, doubles on each failure up to 16 s
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private hasNetworkListeners = false;
+  /** Number of times the connection has been (re-)established since start. */
+  reconnectCount = 0;
 
   connected = false;
   /** Called whenever a message arrives from the server (e.g. pong) */
   onMessage?: (msg: WsMessage) => void;
 
-  constructor(private readonly url: string) {}
+  constructor(
+    private readonly url: string,
+    private readonly token?: string,
+  ) {}
 
   connect(): void {
     this.ensureNetworkListeners();
@@ -35,7 +44,10 @@ export class WsClient {
       this.ws.onopen = () => {
         this.connected = true;
         this.retryDelay = 1000; // reset back-off
-        this.send({ type: 'identify', payload: { role: 'sensor' } });
+        this.reconnectCount++;
+        const identifyPayload: { role: 'sensor'; token?: string } = { role: 'sensor' };
+        if (this.token) identifyPayload.token = this.token;
+        this.send({ type: 'identify', version: WS_PROTOCOL_VERSION, payload: identifyPayload });
       };
 
       this.ws.onmessage = (ev) => {
@@ -82,7 +94,7 @@ export class WsClient {
 
   /** Send a detection reading to the server */
   sendReading(reading: LightReading): void {
-    this.send({ type: 'sensor_reading', payload: reading });
+    this.send({ type: 'sensor_reading', version: WS_PROTOCOL_VERSION, payload: reading });
   }
 
   private send(msg: WsMessage): void {

@@ -42,37 +42,37 @@
 
 ## In progress / next
 
-### Phase 4 — Documentation and Examples
+### Phase 4 — Documentation and Examples ✅
 
-- [ ] Add usage docs for external virtual apps
+- [x] Add usage docs for external virtual apps
   - Minimal example loop: sample → stats → decision → matcher.
   - Demonstrate 10 units × 4 samples/unit assumptions with `PATTERN_LEN=40`.
-- [ ] Add simulation example
+- [x] Add simulation example
   - Multi-agent conversation replay with deterministic signal streams.
   - Headless Node.js script using `src/shared/index.ts` only.
 
-### Phase 5 — Validation and Testing
+### Phase 5 — Validation and Testing ✅
 
-- [ ] Add `vitest` unit tests
+- [x] Add `vitest` unit tests
   - `PatternMatcher` — threshold, alignment, edge/raw trigger distinction.
   - `RollingStatsBuffer` — mean/stddev correctness, warm-up behaviour.
   - `AdaptiveZScoreStrategy` — decision boundary, cold-start guard.
   - `FovMapper` — pixel→angle→pixel round-trip sanity.
   - `TickOrchestrator` — tick count and catch-up capping in headless mode.
-- [ ] Deterministic replay harness
+- [x] Deterministic replay harness
   - Feed a known bit stream and assert matched word.
   - Sweep noise levels to characterise detection margin.
 
-### Phase 6 — Security and Operability
+### Phase 6 — Security and Operability ✅
 
-- [ ] Add minimal WebSocket auth (shared secret token).
-- [ ] Reject unauthenticated or unauthorised role claims.
-- [ ] Add lifecycle hooks (`visibilitychange`, `beforeunload`) to stop camera
+- [x] Add minimal WebSocket auth (shared secret token via `WS_TOKEN` env var).
+- [x] Reject unauthenticated or unauthorised role claims.
+- [x] Add lifecycle hooks (`visibilitychange`, `beforeunload`) to stop camera
   and disconnect WS when the tab is closed or hidden.
-- [ ] Add npm scripts for lint / type-check / test and a CI pipeline.
-- [ ] Add runtime diagnostics panel (actual Hz, decode confidence trends,
+- [x] Add npm scripts for lint / type-check / test and a CI pipeline.
+- [x] Add runtime diagnostics panel (actual Hz, decode confidence trends,
   reconnect count).
-- [ ] Add protocol version field to WS messages for forward compatibility.
+- [x] Add protocol version field to WS messages for forward compatibility.
 
 ### Phase 7 — Package and Distribution
 

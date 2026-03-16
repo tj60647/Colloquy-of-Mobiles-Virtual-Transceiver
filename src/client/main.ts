@@ -723,6 +723,7 @@ async function main(): Promise<void> {
       deltaHistory,
       threshold:       ui.config.detectorMode === 'audio' ? ui.config.audioThreshold : ui.config.threshold,
       wsConnected:     wsClient.connected,
+      wsReconnectCount: wsClient.reconnectCount,
     });
   }
 
