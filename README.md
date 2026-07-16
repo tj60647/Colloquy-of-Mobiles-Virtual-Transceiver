@@ -313,7 +313,36 @@ audio-background-stats-demo.html Audio detection + stats demo
 demo.html                 Flash/detection demo
 vite.config.ts            MPA setup, dev WS proxy, build inputs
 Procfile                  Heroku process declaration
+apps/
+  transmitter/            Standalone transmitter app (see below)
 ```
+
+---
+
+## apps/transmitter — standalone transmitter app
+
+A self-contained Vite app that reproduces the `/flash` transmitter page as its
+own deployable unit (first increment of extracting the transmitter from the
+monolith). It has its own `package.json`, `node_modules`, and build; the only
+tie to the monolith is a temporary relative import of
+`src/shared/dictionary.ts` until the shared core is extracted into a package.
+
+- `npm run dev:tx` — dev server on `http://localhost:5174`
+  (or `npm run dev` inside `apps/transmitter/`).
+- `npm run build:tx` — type-check + build to `apps/transmitter/dist/`.
+- The default control values ship with the app at
+  `apps/transmitter/public/config/transmitter.config.json`, so the
+  `/config/transmitter.config.json` fetch works in the deployed app.
+- Built with `base: './'` (relative asset paths). Note: the runtime config
+  fetch is still the absolute `/config/transmitter.config.json` path, so a
+  path-prefix rewrite proxy needs that fetch made relative first (ROADMAP
+  Phase 8).
+- Planned Vercel deployment (project not created yet): set **Root Directory**
+  to `apps/transmitter` and enable **Include source files outside of the Root
+  Directory** (needed for the shared-dictionary import).
+- The existing `/flash` page in the monolith is unchanged and remains the
+  served transmitter until the standalone app fully replaces it (retirement is
+  a later roadmap step — see ROADMAP Phase 8).
 
 ---
 

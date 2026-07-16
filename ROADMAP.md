@@ -85,6 +85,25 @@
   - `./adapter` — `MatcherInputAdapter`
   - `./orchestrator` — `TickOrchestrator`
 
+### Phase 8 — Standalone transmitter app
+
+- [x] Minimal extraction increment: `apps/transmitter` self-contained Vite app
+  reproducing `/flash` behaviour byte-for-byte, with the production config
+  fetch working (`public/config/transmitter.config.json` ships with the app).
+  Root scripts `dev:tx` / `build:tx`; `base: './'` for standalone-or-proxied
+  hosting; receiver, server, and existing pages untouched.
+- [ ] Core package extraction: move the shared dictionary/matcher core into
+  its own package with inverted shims so the NodeNext server build keeps
+  compiling (removes the temporary `../../../src/shared/dictionary.js` import).
+- [ ] PWA shell (manifest + service worker; replaces the hard-coded `v6`
+  version string with a real build version).
+- [ ] Screen-flash output mode (20 Hz only).
+- [ ] Audio-clock tone scheduler (Web Audio timeline instead of `setTimeout`).
+- [ ] Wake lock while transmitting.
+- [ ] Retire `/flash` from the monolith once the standalone app is deployed.
+- [ ] Optional WS tie-in — requires `WS_TOKEN` configured on the server;
+  tokens are never shipped in the public config.
+
 ---
 
 ## Non-Goals (for now)

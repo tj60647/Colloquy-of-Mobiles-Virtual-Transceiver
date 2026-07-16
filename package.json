@@ -15,7 +15,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dev:tx": "npm --prefix apps/transmitter run dev",
+    "build:tx": "npm --prefix apps/transmitter run build"
   },
   "dependencies": {
     "express": "^4.18.2",

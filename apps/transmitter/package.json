@@ -1,0 +1,20 @@
+{
+  "name": "@colloquy-of-mobiles/transmitter",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Standalone flash/tone word transmitter app (extracted from /flash)",
+  "type": "module",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  }
+}
