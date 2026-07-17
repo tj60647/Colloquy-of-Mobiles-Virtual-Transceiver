@@ -319,7 +319,15 @@ apps/
 
 ---
 
-## apps/transmitter — standalone transmitter app
+## apps/transmitter — standalone transmitter app (DEPRECATED)
+
+> **Deprecated 2026-07-16.** The maintained transmitter now lives in the
+> `Colloquy-of-Mobiles-Virtual-Simulation-SceneGraph` repo as the
+> `/transmitter` page and deploys with the scenegraph Vercel project,
+> consuming the simulation's own communication dictionary (one authority,
+> no cross-repo drift). This app is kept as a working snapshot of the first
+> extraction increment; it will not receive further changes, and the planned
+> standalone Vercel project will not be created.
 
 A self-contained Vite app that reproduces the `/flash` transmitter page as its
 own deployable unit (first increment of extracting the transmitter from the

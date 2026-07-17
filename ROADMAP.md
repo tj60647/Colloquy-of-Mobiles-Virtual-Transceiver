@@ -85,7 +85,12 @@
   - `./adapter` — `MatcherInputAdapter`
   - `./orchestrator` — `TickOrchestrator`
 
-### Phase 8 — Standalone transmitter app
+### Phase 8 — Standalone transmitter app (SUPERSEDED 2026-07-16)
+
+> The maintained transmitter moved to the SceneGraph repo (`/transmitter`
+> page, deployed with the scenegraph Vercel project, one dictionary
+> authority). The remaining items below stay for the record but will not be
+> executed here; `apps/transmitter` is a frozen snapshot.
 
 - [x] Minimal extraction increment: `apps/transmitter` self-contained Vite app
   reproducing `/flash` behaviour byte-for-byte, with the production config
