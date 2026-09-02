@@ -87,10 +87,11 @@
 
 ### Phase 8 — Standalone transmitter app (SUPERSEDED 2026-07-16)
 
-> The maintained transmitter moved to the SceneGraph repo (`/transmitter`
-> page, deployed with the scenegraph Vercel project, one dictionary
+> The maintained transmitter moved to the `Colloquy-of-Mobiles-Virtual-Simulation`
+> repo (the `/transmitter` page, deploying with that project, one dictionary
 > authority). The remaining items below stay for the record but will not be
-> executed here; `apps/transmitter` is a frozen snapshot.
+> executed here; `apps/transmitter` is a frozen snapshot, and `/flash` in this
+> repo is now a permanent duplicate rather than something awaiting retirement.
 
 - [x] Minimal extraction increment: `apps/transmitter` self-contained Vite app
   reproducing `/flash` behaviour byte-for-byte, with the production config

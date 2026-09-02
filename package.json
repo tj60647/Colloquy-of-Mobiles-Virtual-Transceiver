@@ -1,7 +1,7 @@
 {
   "name": "light-pattern-detector",
   "version": "1.0.0",
-  "description": "Webcam-based light pattern detector with Morse code decoding and WebSocket streaming",
+  "description": "Light/audio receiver station for the Colloquy of Mobiles signal vocabulary: webcam or microphone decoding of an 8-word, 40-segment fixed dictionary, relayed over WebSocket",
   "type": "module",
   "engines": {
     "node": ">=20",
