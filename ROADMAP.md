@@ -87,7 +87,7 @@
 
 ### Phase 8 — Standalone transmitter app (SUPERSEDED 2026-07-16)
 
-> The maintained transmitter moved to the `Colloquy-of-Mobiles-Virtual-Simulation`
+> The maintained transmitter moved to the `Virtual-Colloquy-of-Mobiles`
 > repo (the `/transmitter` page, deploying with that project, one dictionary
 > authority). The remaining items below stay for the record but will not be
 > executed here; `apps/transmitter` is a frozen snapshot, and `/flash` in this

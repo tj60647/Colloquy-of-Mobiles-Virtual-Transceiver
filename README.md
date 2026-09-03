@@ -1,4 +1,4 @@
-# Colloquy of Mobiles — Virtual Transceiver
+# Virtual Colloquy of Mobiles — Transceiver
 
 A receiver station for the *Colloquy of Mobiles* signal vocabulary. Point a
 webcam at a flashing phone torch, or a microphone at a gated tone, and the
@@ -667,7 +667,7 @@ ponged since the previous round.
 ### `apps/transmitter/` — frozen, 2026-07-16
 
 The maintained transmitter is no longer in this repo. It is the `/transmitter`
-page in **Colloquy-of-Mobiles-Virtual-Simulation**, where it imports that repo's
+page in **Virtual-Colloquy-of-Mobiles**, where it imports that repo's
 compiled communication dictionary directly, so there is one dictionary authority
 and no cross-repo drift.
 
@@ -698,7 +698,7 @@ It is now a **permanent duplicate** of the flagship's `/transmitter`. Retiring i
 was one of the open items of ROADMAP Phase 8 (`ROADMAP.md:109`), and that phase
 is superseded, so no retirement is planned. Treat `/flash` as a convenience for exercising this
 receiver without a second repo checked out, and do not evolve it: any transmitter
-change belongs in Colloquy-of-Mobiles-Virtual-Simulation. The two will drift, and
+change belongs in Virtual-Colloquy-of-Mobiles. The two will drift, and
 that is accepted.
 
 ---
